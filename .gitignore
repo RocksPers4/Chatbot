@@ -1,0 +1,25 @@
+# Entornos virtuales
+venv/
+env/
+
+# Archivos de caché de Python
+__pycache__/
+*.pyc
+
+# Archivos de entorno
+.env
+.env.local
+
+# Dependencias de Node.js
+node_modules/
+
+# Archivos de registro
+*.log
+
+# Archivos específicos del sistema operativo
+.DS_Store
+Thumbs.db
+
+# Archivos de IDE
+.vscode/
+.idea/

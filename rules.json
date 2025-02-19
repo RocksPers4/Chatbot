@@ -1,0 +1,9 @@
+{
+    "rules": [
+      {
+        "if": "preguntar_requisitos_beca",
+        "then": "Consultar la información del archivo de becas y responder los requisitos."
+      }
+    ]
+  }
+  

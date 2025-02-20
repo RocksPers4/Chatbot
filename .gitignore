@@ -12,6 +12,7 @@ __pycache__/
 
 # Dependencias de Node.js
 node_modules/
+build/
 
 # Archivos de registro
 *.log

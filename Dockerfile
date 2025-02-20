@@ -27,9 +27,10 @@ WORKDIR /app
 # Make port 8080 available to the world outside this container
 EXPOSE 8080
 
-# Define environment variable
+# Define environment variables
 ENV FLASK_APP=backend/app.py
 ENV FLASK_ENV=production
+ENV PORT=8080
 
 # Run app.py when the container launches
 CMD gunicorn --bind 0.0.0.0:$PORT backend.app:app

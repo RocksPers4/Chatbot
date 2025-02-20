@@ -9,9 +9,9 @@ RUN apt-get update && apt-get install -y curl
 RUN curl -fsSL https://deb.nodesource.com/setup_16.x | bash -
 RUN apt-get install -y nodejs
 
-# Actualizar Node.js a la versión 18
-RUN curl -fsSL https://deb.nodesource.com/setup_18.x | bash - && \
-    apt-get install -y nodejs
+# Actualizar Node.js y npm
+RUN curl -fsSL https://deb.nodesource.com/setup_18.x | bash - && apt-get install -y nodejs
+RUN npm install -g npm@latest
 
 
 # Copiar los archivos del proyecto al contenedor
@@ -19,11 +19,16 @@ COPY . /app/
 
 # Instalar las dependencias de backend
 RUN pip install --no-cache-dir -r backend/requirements.txt
-RUN pip cache purge
+
 
 # Instalar dependencias de frontend y construir
 WORKDIR /app/frontend
-RUN npm ci
+RUN pip cache purge
+# Instalar dependencias
+RUN npm install --legacy-peer-deps
+RUN npm install --only=dev
+
+# Luego ejecutar la construcción
 RUN npm run build
 
 # Cambiar de nuevo al directorio principal
@@ -37,5 +42,8 @@ ENV FLASK_APP=backend/app.py
 ENV FLASK_ENV=production
 ENV PORT=8080
 
+
 # Usar gunicorn para ejecutar la app en producción
 CMD ["gunicorn", "--bind", "0.0.0.0:${PORT:-8080}", "backend.app:app"]
+
+RUN pip cache purge

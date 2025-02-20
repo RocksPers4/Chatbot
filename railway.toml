@@ -1,8 +1,8 @@
 [build]
-builder = "nixpacks"
-buildCommand = "cd frontend && npm install && npm run build && cd ../backend && pip install -r requirements.txt"
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
 
 [deploy]
-startCommand = "cd backend && gunicorn app:app"
+startCommand = "python backend/app.py"
 healthcheckPath = "/"
 healthcheckTimeout = 100

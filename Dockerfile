@@ -20,8 +20,7 @@ WORKDIR /app/frontend
 RUN npm install --legacy-peer-deps
 
 # Limpiar la caché de npm y ver si el build tiene detalles de error
-RUN npm cache clean --force
-RUN npm run build --verbose  # Esto imprimirá más detalles del proceso de build
+RUN npm run build  # Esto imprimirá más detalles del proceso de build
 
 # Cambiar de nuevo al directorio principal
 WORKDIR /app

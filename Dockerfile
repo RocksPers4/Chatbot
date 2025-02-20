@@ -24,12 +24,12 @@ RUN npm run build
 # Change back to the main directory
 WORKDIR /app
 
-# Make port 80 available to the world outside this container
-EXPOSE 80
+# Make port 8080 available to the world outside this container
+EXPOSE 8080
 
 # Define environment variable
 ENV FLASK_APP=backend/app.py
 ENV FLASK_ENV=production
 
 # Run app.py when the container launches
-CMD ["gunicorn", "--bind", "0.0.0.0:80", "backend.app:app"]
+CMD gunicorn --bind 0.0.0.0:$PORT backend.app:app

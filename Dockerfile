@@ -38,4 +38,4 @@ ENV FLASK_ENV=production
 ENV PORT=8080
 
 # Usar gunicorn para ejecutar la app en producción
-CMD ["gunicorn", "--bind", "0.0.0.0:${PORT:-8080}", "main:app"]
+CMD ["gunicorn", "--bind", "0.0.0.0:${PORT:-8080}", "backend.app:app"]

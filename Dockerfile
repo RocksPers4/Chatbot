@@ -33,4 +33,4 @@ ENV FLASK_ENV=production
 ENV PORT=8080
 
 # Run app.py when the container launches
-CMD gunicorn --bind 0.0.0.0:$PORT backend.app:app
+CMD ["gunicorn", "--bind", "0.0.0.0:$PORT", "backend.app:app"]

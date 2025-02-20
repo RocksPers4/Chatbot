@@ -4,7 +4,7 @@ FROM python:3.9
 # Establecer el directorio de trabajo en el contenedor
 WORKDIR /app
 
-# Instalar Node.js y npm (sin actualización global de npm)
+# Instalar Node.js y npm
 RUN apt-get update && apt-get install -y curl
 RUN curl -fsSL https://deb.nodesource.com/setup_16.x | bash - 
 RUN apt-get install -y nodejs
@@ -15,17 +15,18 @@ COPY . /app/
 # Instalar las dependencias de backend
 RUN pip install --no-cache-dir -r backend/requirements.txt
 
-# Instalar dependencias de frontend y construir
+# Instalar dependencias de frontend
 WORKDIR /app/frontend
 RUN npm install --legacy-peer-deps
 
-# Luego ejecutar la construcción
-RUN npm run build
+# Limpiar la caché de npm y ver si el build tiene detalles de error
+RUN npm cache clean --force
+RUN npm run build --verbose  # Esto imprimirá más detalles del proceso de build
 
 # Cambiar de nuevo al directorio principal
 WORKDIR /app
 
-# Exponer el puerto 8080 (asegúrate de que coincida con lo que Railway necesita)
+# Exponer el puerto 8080
 EXPOSE 8080
 
 # Definir las variables de entorno para Flask

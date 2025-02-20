@@ -18,8 +18,8 @@ RUN pip cache purge
 
 # Install frontend dependencies and build
 WORKDIR /app/frontend
-RUN npm ci
-RUN npm run build
+RUN npm ci --legacy-peer-deps
+RUN npm run build --max-old-space-size=256
 
 # Change back to the main directory
 WORKDIR /app

@@ -6,12 +6,13 @@ WORKDIR /app
 
 # Instalar Node.js y npm
 RUN apt-get update && apt-get install -y curl
-RUN curl -fsSL https://deb.nodesource.com/setup_16.x | bash -
+RUN curl -fsSL https://deb.nodesource.com/setup_18.x | bash -
 RUN apt-get install -y nodejs
 
-# Actualizar Node.js y npm
-RUN curl -fsSL https://deb.nodesource.com/setup_18.x | bash - && apt-get install -y nodejs
-RUN npm install -g npm@latest
+
+# Instalar npm globalmente con permisos de root
+RUN npm cache clean --force
+RUN npm install -g npm@latest --unsafe-perm=true --verbose
 
 
 # Copiar los archivos del proyecto al contenedor

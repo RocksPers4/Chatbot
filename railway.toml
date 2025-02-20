@@ -4,8 +4,6 @@ dockerfilePath = "Dockerfile"
 
 [deploy]
 startCommand = "gunicorn --bind 0.0.0.0:$PORT backend.app:app"
-healthcheckPath = "/"
-healthcheckTimeout = 300
 
 [variables]
 PORT = 8080

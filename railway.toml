@@ -3,11 +3,7 @@ builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile"
 
 [deploy]
-startCommand = "gunicorn --bind 0.0.0.0:$PORT backend.app:app"
-
-# Elimina healthcheckPath si no es necesario
-healthcheckPath = "/"
-healthcheckTimeout = 300
+startCommand = "gunicorn --bind 0.0.0.0:$PORT backend.app:app"  # Comando para iniciar la app con gunicorn
 
 [variables]
-PORT = "8080"  # Aquí defines el puerto que usará Railway
+PORT = 8080  # Asegúrate de que el puerto esté configurado correctamente

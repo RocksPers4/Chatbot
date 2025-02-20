@@ -3,6 +3,7 @@ import os
 from flask import Flask, send_from_directory
 from flask_cors import CORS
 from routes.chat import chat_bp, chatbot
+from werkzeug.utils import secure_filename
 from config import Config
 
 app = Flask(__name__, static_folder='../frontend/build')
@@ -14,8 +15,6 @@ app.register_blueprint(chat_bp)
 
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
-
-
 def serve(path):
     if path != "" and os.path.exists(app.static_folder + '/' + path):
         return send_from_directory(app.static_folder, path)

@@ -9,14 +9,12 @@ RUN apt-get update && apt-get install -y curl
 RUN curl -fsSL https://deb.nodesource.com/setup_16.x | bash -
 RUN apt-get install -y nodejs
 
-# Verify Node.js and npm installation
-RUN node --version && npm --version
-
 # Copy the current directory contents into the container at /app
 COPY . /app/
 
 # Install backend dependencies
-RUN cd backend && pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r backend/requirements.txt
+RUN pip cache purge
 
 # Install frontend dependencies and build
 WORKDIR /app/frontend
@@ -30,7 +28,8 @@ WORKDIR /app
 EXPOSE 80
 
 # Define environment variable
-ENV NAME World
+ENV FLASK_APP=backend/app.py
+ENV FLASK_ENV=production
 
 # Run app.py when the container launches
-CMD ["python", "backend/app.py"]
+CMD ["gunicorn", "--bind", "0.0.0.0:80", "backend.app:app"]

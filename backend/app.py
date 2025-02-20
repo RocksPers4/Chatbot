@@ -24,12 +24,10 @@ def serve(path):
     else:
         return send_from_directory(app.static_folder, 'index.html')
 
+# Asegúrate de que el chatbot se inicializa correctamente
+chatbot.initialize()  # Inicializa el chatbot si es necesario
+
+# Eliminar app.run() ya que usaremos gunicorn para la producción
 if __name__ == '__main__':
-    # Inicializar el chatbot (asegúrate de que `initialize()` esté bien definido en tu chatbot.py)
-    chatbot.initialize()  # Inicializa el chatbot si es necesario
-
-    # Obtener el puerto desde las variables de entorno (usando un valor predeterminado de 8080)
-    port = int(os.environ.get('PORT', 8080))
-
-    # Deshabilitar el modo debug en producción
-    app.run(host='0.0.0.0', port=port, debug=False)  # Cambié `debug=True` a `debug=False` para producción
+    # En producción gunicorn se encargará de iniciar la app
+    pass

@@ -9,11 +9,9 @@ RUN apt-get update && apt-get install -y curl
 RUN curl -fsSL https://deb.nodesource.com/setup_16.x | bash -
 RUN apt-get install -y nodejs
 
-
 # Instalar npm globalmente con permisos de root
 RUN npm cache clean --force
 RUN npm install -g npm@latest --unsafe-perm=true --verbose
-
 
 # Copiar los archivos del proyecto al contenedor
 COPY . /app/
@@ -21,15 +19,12 @@ COPY . /app/
 # Instalar las dependencias de backend
 RUN pip install --no-cache-dir -r backend/requirements.txt
 
-
 # Instalar dependencias de frontend y construir
 WORKDIR /app/frontend
-RUN pip cache purge
-# Instalar dependencias
 RUN npm install --legacy-peer-deps
 RUN npm install --only=dev
 
-# Luego ejecutar la construcción
+# Ejecutar la construcción del frontend
 RUN npm run build
 
 # Cambiar de nuevo al directorio principal
@@ -43,8 +38,8 @@ ENV FLASK_APP=backend/app.py
 ENV FLASK_ENV=production
 ENV PORT=8080
 
-
 # Usar gunicorn para ejecutar la app en producción
 CMD ["gunicorn", "--bind", "0.0.0.0:${PORT:-8080}", "backend.app:app"]
 
+# Limpiar la caché de pip después de la instalación de dependencias
 RUN pip cache purge

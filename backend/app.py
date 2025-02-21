@@ -8,8 +8,11 @@ app = Flask(__name__)
 CORS(app)
 app.config.from_object(Config)
 
+# Inicializar el chatbot antes de registrar las rutas
+chatbot.initialize()
+
+# Registrar el Blueprint para las rutas
 app.register_blueprint(chat_bp)
 
 if __name__ == '__main__':
-    chatbot.initialize()  # Inicializa el chatbot si es necesario
-    app.run(debug=True)
+    app.run(host="0.0.0.0", port=4000)  # Solo para pruebas locales

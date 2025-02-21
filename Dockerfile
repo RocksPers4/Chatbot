@@ -27,10 +27,10 @@ COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY backend/ /proyecto-chatbot-becas/backend/
-COPY backend/run.py /proyecto-chatbot-becas/backend/run.py
+COPY backend/app.py /proyecto-chatbot-becas/backend/app.py
 
 # Set environment variables
-ENV FLASK_APP=backend/run.py
+ENV FLASK_APP=backend/app.py
 ENV FLASK_ENV=production
 ENV PORT=4000
 
@@ -38,4 +38,4 @@ ENV PORT=4000
 EXPOSE 4000
 
 # Run the application
-ENTRYPOINT ["gunicorn", "-w", "4", "-b", "0.0.0.0:4000", "backend.run:app"]
+ENTRYPOINT ["gunicorn", "-w", "4", "-b", "0.0.0.0:4000", "backend.app:app"]

@@ -1,12 +1,18 @@
 # Build stage for React frontend
-FROM node:14 as build-stage
+FROM node:14.17.0 as build-stage
 
-WORKDIR /app/frontend
+WORKDIR /app
 
+# Copy package.json and package-lock.json
 COPY frontend/package*.json ./
+
+# Install dependencies
 RUN npm ci
 
+# Copy frontend files
 COPY frontend/ ./
+
+# Build the app
 RUN npm run build
 
 # Production stage for Python backend
@@ -15,7 +21,7 @@ FROM python:3.9
 WORKDIR /app
 
 # Copy built React files
-COPY --from=build-stage /app/frontend/build /app/frontend/build
+COPY --from=build-stage /app/build /app/frontend/build
 
 # Copy backend files
 COPY backend/ /app/backend/

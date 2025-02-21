@@ -1,7 +1,7 @@
 # Build stage for React frontend
 FROM node:14.17.0 as build-stage
 
-WORKDIR /app
+WORKDIR /app/frontend
 
 # Copy package.json and package-lock.json
 COPY frontend/package*.json ./
@@ -21,7 +21,7 @@ FROM python:3.9
 WORKDIR /app
 
 # Copy built React files
-COPY --from=build-stage /app/build /app/frontend/build
+COPY --from=build-stage /app/frontend/build /app/frontend/build
 
 # Copy backend files
 COPY backend/ /app/backend/
@@ -34,10 +34,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Set environment variables
 ENV FLASK_APP=run.py
 ENV FLASK_ENV=production
-ENV PORT=8080
+ENV PORT=5000
 
 # Expose the port the app runs on
-EXPOSE 8080
+EXPOSE 5000
 
 # Run the application
-CMD ["gunicorn", "--bind", "0.0.0.0:8080", "run:app"]
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "run:app"]

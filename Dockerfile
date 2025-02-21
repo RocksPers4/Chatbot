@@ -9,9 +9,6 @@ COPY frontend/package*.json ./
 # Install dependencies with legacy-peer-deps to avoid conflicts
 RUN npm ci --legacy-peer-deps
 
-# Install missing Babel dependency (fixes build error)
-RUN npm install --save-dev @babel/plugin-proposal-private-property-in-object
-
 # Copy frontend files
 COPY frontend/ ./
 
@@ -23,6 +20,10 @@ FROM python:3.9
 
 WORKDIR /app
 
+# Crear un entorno virtual para evitar problemas con permisos y paquetes
+RUN python -m venv venv
+ENV PATH="/app/venv/bin:$PATH"
+
 # Copy built React files
 COPY --from=build-stage /app/frontend/build /app/frontend/build
 
@@ -30,7 +31,7 @@ COPY --from=build-stage /app/frontend/build /app/frontend/build
 COPY backend/ /app/backend/
 COPY run.py /app/
 
-# Install Python dependencies (fix incorrect path)
+# Install Python dependencies
 COPY backend/requirements.txt /app/backend/
 RUN pip install --no-cache-dir -r /app/backend/requirements.txt
 
@@ -39,8 +40,8 @@ ENV FLASK_APP=run.py
 ENV FLASK_ENV=production
 ENV PORT=4000
 
-# Expose the correct port
-EXPOSE ${PORT:-4000}
+# Expose the correct port (default 4000)
+EXPOSE 4000
 
 # Run the application
-CMD ["gunicorn", "--bind", "0.0.0.0:${PORT:-4000}", "run:app"]
+CMD ["gunicorn", "--bind", "0.0.0.0:4000", "run:app"]

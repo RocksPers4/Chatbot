@@ -27,6 +27,8 @@ class ChatbotService:
     qa_pipeline = None
     stop_words = set(stopwords.words('spanish'))
     beto_qa_pipeline = None
+    model.eval()  # Pone el modelo en modo evaluación
+    torch.no_grad()  # Desactiva el cálculo de gradientes
 
     @classmethod
     def initialize(cls):

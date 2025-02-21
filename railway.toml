@@ -3,11 +3,11 @@ builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile"
 
 [deploy]
-startCommand = "gunicorn --bind 0.0.0.0:$PORT backend.app:app"
+startCommand = "gunicorn run:app"
 healthcheckPath = "/"
 healthcheckTimeout = 300
 
 [env]
 PYTHON_VERSION = "3.9"
 NODE_VERSION = "14"
-PORT = 5050
+PORT = "4000"

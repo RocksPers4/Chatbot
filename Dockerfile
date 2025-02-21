@@ -37,10 +37,10 @@ RUN pip install --no-cache-dir -r /app/backend/requirements.txt
 # Set environment variables
 ENV FLASK_APP=run.py
 ENV FLASK_ENV=production
-ENV PORT=5000
+ENV PORT=4000
 
 # Expose the correct port
-EXPOSE ${PORT:-5050}
+EXPOSE ${PORT:-4000}
 
 # Run the application
-CMD ["gunicorn", "--bind", "0.0.0.0:${PORT:-5050}", "backend.app:app"]
+CMD ["gunicorn", "--bind", "0.0.0.0:${PORT:-4000}", "run:app"]

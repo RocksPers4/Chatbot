@@ -6,13 +6,11 @@ WORKDIR /app/frontend
 # Copy package.json and package-lock.json
 COPY frontend/package*.json ./
 
-# Install dependencies with legacy-peer-deps to avoid conflicts
+# Install dependencies
 RUN npm ci --legacy-peer-deps
 
-# Copy frontend files
+# Copy frontend files and build
 COPY frontend/ ./
-
-# Build the React app
 RUN npm run build
 
 # Production stage for Python backend
@@ -20,28 +18,24 @@ FROM python:3.9
 
 WORKDIR /app
 
-# Crear un entorno virtual para evitar problemas con permisos y paquetes
-RUN python -m venv venv
-ENV PATH="/app/venv/bin:$PATH"
-
 # Copy built React files
 COPY --from=build-stage /app/frontend/build /app/frontend/build
 
-# Copy backend files
+# Backend setup
+WORKDIR /app/backend
+COPY backend/requirements.txt .  
+RUN pip install --no-cache-dir -r requirements.txt
+
 COPY backend/ /app/backend/
 COPY run.py /app/
-
-# Install Python dependencies
-COPY backend/requirements.txt /app/backend/
-RUN pip install --no-cache-dir -r /app/backend/requirements.txt
 
 # Set environment variables
 ENV FLASK_APP=run.py
 ENV FLASK_ENV=production
 ENV PORT=4000
 
-# Expose the correct port (default 4000)
+# Expose port
 EXPOSE 4000
 
 # Run the application
-CMD ["gunicorn", "--bind", "0.0.0.0:4000", "run:app"]
+ENTRYPOINT ["gunicorn", "backend.app:app", "--bind", "0.0.0.0:$PORT"]

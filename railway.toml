@@ -3,11 +3,9 @@ builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile"
 
 [deploy]
-startCommand = "gunicorn run:app"
-healthcheckPath = "/"
+healthcheckPath = "backend/routes/chat"  # Asegúrate de que este endpoint existe en tu backend
 healthcheckTimeout = 300
 
 [env]
-PYTHON_VERSION = "3.9"
-NODE_VERSION = "14"
+NODE_VERSION = "16"
 PORT = "4000"

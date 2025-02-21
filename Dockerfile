@@ -30,7 +30,7 @@ COPY backend/ /app/backend/
 COPY run.py /app/
 
 # Set environment variables
-ENV FLASK_APP=run.py
+ENV FLASK_APP=backend.app
 ENV FLASK_ENV=production
 ENV PORT=4000
 
@@ -38,4 +38,4 @@ ENV PORT=4000
 EXPOSE 4000
 
 # Run the application
-ENTRYPOINT ["gunicorn", "backend.app:app", "--bind", "0.0.0.0:$PORT"]
+ENTRYPOINT ["gunicorn", "backend.app:app", "--bind", "0.0.0.0:4000"]

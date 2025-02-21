@@ -1,11 +1,5 @@
-import sys
-import os
 from flask import Blueprint, request, jsonify
-
-# Agregamos manualmente la carpeta 'backend' al path si es necesario
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
-
-from backend.services.chatbot import ChatbotService  # Asegurar que la ruta es correcta
+from services.chatbot import ChatbotService  # Update this import to match your actual file structure
 
 chat_bp = Blueprint('chat', __name__)
 chatbot = ChatbotService()
@@ -19,7 +13,9 @@ def chat():
         return jsonify({"error": "Message is required"}), 400
     
     try:
-        response = chatbot.get_response(message)
+        response = chatbot.get_response(message)  # Removed user_id parameter
+        # If you still want to save the conversation, you can do it here without a user_id
+        # For example: Conversation.save(message, response)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
     
@@ -36,3 +32,4 @@ def feedback():
     
     feedback_response = chatbot.handle_feedback(feedback, last_response)
     return jsonify({"response": feedback_response})
+

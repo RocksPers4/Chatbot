@@ -1,1 +1,1 @@
-web: python backend/app.py
+web: gunicorn --bind 0.0.0.0:4000 run:app

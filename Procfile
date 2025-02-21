@@ -1,1 +1,1 @@
-web: gunicorn backend.app:app --bind 0.0.0.0:4000
+web: gunicorn app:app --bind 0.0.0.0:4000

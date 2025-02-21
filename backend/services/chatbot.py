@@ -36,10 +36,11 @@ class ChatbotService:
         """
         try:
             cls.connection = mysql.connector.connect(
-                host='localhost',
-                database='espoch_chatbot',
-                user='root',
-                password='zoe1506'
+                host=os.getenv('MYSQL_HOST'),
+                database=os.getenv('MYSQL_DATABASE'),
+                user=os.getenv('MYSQL_USER'),
+                password=os.getenv('MYSQL_PASSWORD'),
+                port=os.getenv('MYSQL_PORT', 3306),
             )
             if cls.connection.is_connected():
                 logging.info("Conectado a MySQL correctamente.")

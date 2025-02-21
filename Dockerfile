@@ -26,11 +26,11 @@ WORKDIR /proyecto-chatbot-becas/backend
 COPY backend/requirements.txt .  
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY backend/ /proyecto-chatbot-becas/backend/
+COPY ./backend /proyecto-chatbot-becas/backend
 COPY backend/app.py /proyecto-chatbot-becas/backend/app.py
 
 # Set environment variables
-ENV FLASK_APP=backend/app.py
+ENV FLASK_APP=backend.app
 ENV FLASK_ENV=production
 ENV PORT=4000
 

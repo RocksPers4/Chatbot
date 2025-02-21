@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify
-from backend.services.chatbot import ChatbotService  # Update this import to match your actual file structure
+from services.chatbot import ChatbotService  # Update this import to match your actual file structure
 
 chat_bp = Blueprint('chat', __name__)
 chatbot = ChatbotService()
@@ -32,4 +32,3 @@ def feedback():
     
     feedback_response = chatbot.handle_feedback(feedback, last_response)
     return jsonify({"response": feedback_response})
-

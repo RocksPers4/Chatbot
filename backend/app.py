@@ -1,15 +1,15 @@
-import sys
-import os
-
-# Add the project root directory to the Python path
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
+# backend/app.py
 from flask import Flask
-from backend.routes.chat import chat_bp
+from flask_cors import CORS
+from routes.chat import chat_bp, chatbot
+from config import Config
 
 app = Flask(__name__)
+CORS(app)
+app.config.from_object(Config)
+
 app.register_blueprint(chat_bp)
 
 if __name__ == '__main__':
+    chatbot.initialize()  # Inicializa el chatbot si es necesario
     app.run(debug=True)
-

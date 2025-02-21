@@ -3,6 +3,7 @@ builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile"
 
 [deploy]
+healthcheckPath = "backend/routes/chat"  # Asegúrate de que este endpoint existe en tu backend
 healthcheckTimeout = 300
 
 [env]

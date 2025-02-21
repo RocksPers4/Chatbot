@@ -40,7 +40,7 @@ ENV FLASK_ENV=production
 ENV PORT=5000
 
 # Expose the correct port
-EXPOSE 5000
+EXPOSE ${PORT:-5050}
 
 # Run the application
-CMD ["gunicorn", "--bind", "0.0.0.0:${PORT:-5000}", "run:app"]
+CMD ["gunicorn", "--bind", "0.0.0.0:${PORT:-5050}", "run:app"]

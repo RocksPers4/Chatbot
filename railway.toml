@@ -10,4 +10,4 @@ healthcheckTimeout = 300
 [env]
 PYTHON_VERSION = "3.9"
 NODE_VERSION = "14"
-PORT = "5000"
+PORT = 5050

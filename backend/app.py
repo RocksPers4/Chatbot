@@ -25,15 +25,11 @@ def create_app():
     def server_error(e):
         return jsonify(error=str(e)), 500
 
-    # Registrar explícitamente los manejadores de errores
-    app.register_error_handler(404, not_found)
-    app.register_error_handler(500, server_error)
-
     return app
 
 app = create_app()
 
 if __name__ == '__main__':
-    chatbot.initialize()  # Inicializa el chatbot si es necesario
+    chatbot.initialize()  # Inicializa el chatbot antes de arrancar la app
     port = int(os.environ.get('PORT', 4000))
     app.run(host='0.0.0.0', port=port)

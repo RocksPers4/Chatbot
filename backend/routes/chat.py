@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify
-from services.chatbot import ChatbotService  # Update this import to match your actual file structure
+from backend.services.chatbot import ChatbotService  # Update this import to match your actual file structure
 
 chat_bp = Blueprint('chat', __name__)
 chatbot = ChatbotService()

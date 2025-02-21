@@ -3,7 +3,10 @@ builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile"
 
 [deploy]
-startCommand = "gunicorn --bind 0.0.0.0:$PORT backend.app:app"  # Comando para iniciar la app con gunicorn
+startCommand = "gunicorn --bind 0.0.0.0:$PORT run:app"
+healthcheckPath = "/"
+healthcheckTimeout = 300
 
-[variables]
-PORT = 8080  # Asegúrate de que el puerto esté configurado correctamente
+[env]
+PYTHON_VERSION = "3.9"
+NODE_VERSION = "14"

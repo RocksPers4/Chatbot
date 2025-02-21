@@ -1,36 +1,37 @@
-# Use an official Python runtime as a parent image
-FROM python:3.9
+# Build stage for React frontend
+FROM node:14 as build-stage
 
-# Set the working directory in the container
-WORKDIR /app
-
-# Install Node.js and npm
-RUN apt-get update && apt-get install -y curl
-RUN curl -fsSL https://deb.nodesource.com/setup_16.x | bash -
-RUN apt-get install -y nodejs
-
-# Copy the current directory contents into the container at /app
-COPY . /app/
-
-# Install backend dependencies
-RUN pip install --no-cache-dir -r backend/requirements.txt
-RUN pip cache purge
-
-# Install frontend dependencies and build
 WORKDIR /app/frontend
+
+COPY frontend/package*.json ./
 RUN npm ci
+
+COPY frontend/ ./
 RUN npm run build
 
-# Change back to the main directory
+# Production stage for Python backend
+FROM python:3.9
+
 WORKDIR /app
 
-# Make port 8080 available to the world outside this container
-EXPOSE 8080
+# Copy built React files
+COPY --from=build-stage /app/frontend/build /app/frontend/build
 
-# Define environment variables
-ENV FLASK_APP=backend/app.py
+# Copy backend files
+COPY backend/ /app/backend/
+COPY run.py /app/
+
+# Install Python dependencies
+COPY backend/requirements.txt /app/
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Set environment variables
+ENV FLASK_APP=run.py
 ENV FLASK_ENV=production
 ENV PORT=8080
 
-# Run app.py when the container launches
-CMD ["gunicorn", "--bind", "0.0.0.0:$PORT", "backend.app:app"]
+# Expose the port the app runs on
+EXPOSE 8080
+
+# Run the application
+CMD ["gunicorn", "--bind", "0.0.0.0:8080", "run:app"]

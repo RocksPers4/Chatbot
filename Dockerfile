@@ -38,4 +38,4 @@ ENV PORT=4000
 EXPOSE 4000
 
 # Run the application
-ENTRYPOINT ["gunicorn", "backend/run:app", "--bind", "0.0.0.0:4000"]
+ENTRYPOINT ["gunicorn", "-w", "4", "-b", "0.0.0.0:4000", "backend.run:app"]

@@ -27,7 +27,7 @@ COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY backend/ /proyecto-chatbot-becas/backend/
-COPY run.py /proyecto-chatbot-becas/backend/run.py
+COPY run.py /backend/
 
 # Set environment variables
 ENV FLASK_APP=backend/run.py

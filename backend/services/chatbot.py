@@ -21,14 +21,14 @@ nltk.download('stopwords')
 
 class ChatbotService:
     connection = None
-    model = None
     tokenizer = None
-    conversation_history = []
-    vectorizer = None
+    model = None
     qa_pipeline = None
-    stop_words = set(stopwords.words('spanish'))
     beto_qa_pipeline = None
-    torch.no_grad()  # Desactiva el cálculo de gradientes
+    vectorizer = None
+    conversation_history = []
+    stop_words = set(stopwords.words('spanish'))
+    torch.no_grad()
 
     @classmethod
     def initialize(cls):
@@ -44,12 +44,7 @@ class ChatbotService:
                 port=Config.MYSQL_PORT
             )
             if cls.connection.is_connected():
-                db_info = cls.connection.get_server_info()
-                logging.info(f"Conectado a MySQL servidor versión {db_info}")
-                cursor = cls.connection.cursor()
-                cursor.execute("SELECT DATABASE();")
-                db_name = cursor.fetchone()[0]
-                logging.info(f"Conectado a la base de datos: {db_name}")
+                logging.info(f"Conectado a MySQL versión {cls.connection.get_server_info()}")
 
             # Cargar modelo DistilBERT y tokenizer
             cls.tokenizer = AutoTokenizer.from_pretrained("distilbert-base-multilingual-cased")
@@ -57,71 +52,71 @@ class ChatbotService:
             cls.qa_pipeline = pipeline("question-answering", model=cls.model, tokenizer=cls.tokenizer)
             cls.beto_qa_pipeline = pipeline("question-answering", model="dccuchile/bert-base-spanish-wwm-cased", tokenizer="dccuchile/bert-base-spanish-wwm-cased")
 
-            logging.info("Modelo DistilBERT multilingüe cargado correctamente.")
-
-            # Inicializar el vectorizador para la detección de intenciones
+            logging.info("Modelos cargados correctamente.")
+            
             cls.vectorizer = TfidfVectorizer(stop_words=list(cls.stop_words))
-            all_intents = cls.get_all_intents()
-            cls.vectorizer.fit(all_intents)
+            cls.vectorizer.fit(cls.get_all_intents())
 
         except mysql.connector.Error as e:
             logging.error(f"Error al conectar a MySQL: {e}")
-            logging.error(f"Configuración: Host={Config.MYSQL_HOST}, User={Config.MYSQL_USER}, DB={Config.MYSQL_DB}, Port={Config.MYSQL_PORT}")
             raise
         except Exception as e:
-            logging.error(f"Error al cargar datos o modelo: {str(e)}")
+            logging.error(f"Error en la inicialización: {e}")
             raise
 
     @classmethod
     def get_all_intents(cls):
-        """
-        Obtiene todas las preguntas de intents de la base de datos.
-        """
-        cursor = cls.connection.cursor()
-        query = """
-        SELECT pregunta FROM preguntas_beca
-        UNION
-        SELECT pregunta FROM preguntas_ayudas
-        UNION
-        SELECT pregunta FROM preguntas_saludo
-        """
-        cursor.execute(query)
-        intents = [row[0] for row in cursor.fetchall()]
-        cursor.close()
-        return intents
+        """Obtiene todas las preguntas de intents de la base de datos."""
+        try:
+            cursor = cls.connection.cursor()
+            query = """
+            SELECT pregunta FROM preguntas_beca
+            UNION
+            SELECT pregunta FROM preguntas_ayudas
+            UNION
+            SELECT pregunta FROM preguntas_saludo
+            """
+            cursor.execute(query)
+            intents = [row[0] for row in cursor.fetchall()]
+            cursor.close()
+            return intents
+        except Exception as e:
+            logging.error(f"Error al obtener intents: {e}")
+            return []
 
     @classmethod
     def match_intent(cls, message):
         """
         Busca un intent correspondiente al mensaje del usuario en la base de datos.
         """
-        cursor = cls.connection.cursor(dictionary=True)
-        query = """
-        SELECT 'beca' as tipo, rb.respuesta
-        FROM preguntas_beca pb
-        JOIN intents_beca ib ON pb.intent_beca_id = ib.id
-        JOIN respuestas_beca rb ON rb.intent_beca_id = ib.id
-        WHERE LOWER(pb.pregunta) LIKE %s
-        UNION
-        SELECT 'ayuda' as tipo, ra.respuesta
-        FROM preguntas_ayudas pa
-        JOIN intents_ayudas ia ON pa.intent_id = ia.id
-        JOIN respuestas_ayudas ra ON ra.intent_id = ia.id
-        WHERE LOWER(pa.pregunta) LIKE %s
-        UNION
-        SELECT 'saludo' as tipo, rs.respuesta
-        FROM preguntas_saludo ps
-        JOIN intents_saludo isa ON ps.intent_saludo_id = isa.id
-        JOIN respuestas_saludo rs ON rs.intent_saludo_id = isa.id
-        WHERE LOWER(ps.pregunta) LIKE %s
-        """
-        cursor.execute(query, (f"%{message.lower()}%", f"%{message.lower()}%", f"%{message.lower()}%"))
-        results = cursor.fetchall()
-        cursor.close()
-
-        if results:
-            return random.choice(results)
-        return None
+        try:
+            cursor = cls.connection.cursor(dictionary=True)
+            query = """
+            SELECT 'beca' as tipo, rb.respuesta
+            FROM preguntas_beca pb
+            JOIN intents_beca ib ON pb.intent_beca_id = ib.id
+            JOIN respuestas_beca rb ON rb.intent_beca_id = ib.id
+            WHERE LOWER(pb.pregunta) LIKE %s
+            UNION
+            SELECT 'ayuda' as tipo, ra.respuesta
+            FROM preguntas_ayudas pa
+            JOIN intents_ayudas ia ON pa.intent_id = ia.id
+            JOIN respuestas_ayudas ra ON ra.intent_id = ia.id
+            WHERE LOWER(pa.pregunta) LIKE %s
+            UNION
+            SELECT 'saludo' as tipo, rs.respuesta
+            FROM preguntas_saludo ps
+            JOIN intents_saludo isa ON ps.intent_saludo_id = isa.id
+            JOIN respuestas_saludo rs ON rs.intent_saludo_id = isa.id
+            WHERE LOWER(ps.pregunta) LIKE %s
+            """
+            cursor.execute(query, (f"%{message.lower()}%", f"%{message.lower()}%", f"%{message.lower()}%"))
+            results = cursor.fetchall()
+            cursor.close()
+            return results if results else None
+        except Exception as e:
+            logging.error(f"Error al buscar intent: {e}")
+            return None
 
     @classmethod
     def is_beca_related(cls, message):
@@ -136,6 +131,9 @@ class ChatbotService:
         """
         Genera una respuesta usando el modelo DistilBERT.
         """
+        with torch.no_grad():
+            result = cls.qa_pipeline(question=question, context=chunk)
+
         try:
             # Dividir el contexto en chunks más pequeños si es muy largo
             max_length = 512
@@ -353,7 +351,8 @@ class ChatbotService:
             return "Lo siento, no pude procesar esa pregunta. ¿Podrías reformularla o preguntar sobre algo más?"
     
     @classmethod
-    def get_beto_response(cls, message):
+    def get_beto_response(cls, message, context):
+        
         try:
             # Contexto general sobre la ESPOCH y las funciones del chatbot
             context = """

@@ -33,11 +33,11 @@ COPY ./backend /proyecto-chatbot-becas/backend
 ENV FLASK_APP=app
 ENV FLASK_ENV=production
 ENV PORT=4000
-ENV MYSQL_HOST=your-mysql-host
-ENV MYSQL_USER=your-mysql-user
-ENV MYSQL_PASSWORD=your-mysql-password
-ENV MYSQL_DB=your-mysql-database
-ENV MYSQL_PORT=3306
+ENV MYSQL_HOST=${MYSQL_HOST}
+ENV MYSQL_USER=${MYSQL_USER}
+ENV MYSQL_PASSWORD=${MYSQL_PASSWORD}
+ENV MYSQL_DB=${MYSQL_DB}
+ENV MYSQL_PORT=${MYSQL_PORT}
 
 # Expose port
 EXPOSE 4000

@@ -9,8 +9,3 @@ healthcheckTimeout = 300
 [env]
 NODE_VERSION = "16"
 PORT = "4000"
-MYSQL_HOST = "your-mysql-host"
-MYSQL_USER = "your-mysql-user"
-MYSQL_PASSWORD = "your-mysql-password"
-MYSQL_DB = "your-mysql-database"
-MYSQL_PORT = "3306"

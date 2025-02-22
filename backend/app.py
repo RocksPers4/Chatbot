@@ -14,6 +14,10 @@ def create_app():
     CORS(app)
     app.config.from_object(Config)
 
+    @app.route("/")
+    def home():
+        return "¡El servidor Flask está corriendo correctamente!"
+
     logging.info(f"Configuración de MySQL: Host={Config.MYSQL_HOST}, User={Config.MYSQL_USER}, DB={Config.MYSQL_DB}, Port={Config.MYSQL_PORT}")
 
     # Inicializar el chatbot

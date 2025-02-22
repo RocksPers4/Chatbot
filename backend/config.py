@@ -9,7 +9,7 @@ class Config:
     MYSQL_HOST = os.environ.get('MYSQLHOST', 'shuttle.proxy.rlwy.net')
     MYSQL_USER = os.environ.get('MYSQLUSER', 'root')
     MYSQL_PASSWORD = os.environ.get('MYSQLPASSWORD', 'tQnPxOGTPXzPPRjVexBFZytraYuzuDfF')
-    MYSQL_DB = os.environ.get('MYSQLDATABASE', 'espoch_chatbot')
+    MYSQL_DB = os.environ.get('MYSQLDATABASE', 'railway')
     MYSQL_PORT = int(os.environ.get('MYSQLPORT', 55939))
     
     @classmethod

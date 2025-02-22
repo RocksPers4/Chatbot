@@ -10,6 +10,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 import nltk
 from nltk.tokenize import word_tokenize
 from nltk.corpus import stopwords
+from config import Config
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -36,11 +37,11 @@ class ChatbotService:
         """
         try:
             cls.connection = mysql.connector.connect(
-                host=os.getenv('MYSQL_HOST'),
-                database=os.getenv('MYSQL_DATABASE'),
-                user=os.getenv('MYSQL_USER'),
-                password=os.getenv('MYSQL_PASSWORD'),
-                port=os.getenv('MYSQL_PORT', 3306),
+                host=Config.MYSQL_HOST,
+                user=Config.MYSQL_USER,
+                password=Config.MYSQL_PASSWORD,
+                database=Config.MYSQL_DB,
+                port=Config.MYSQL_PORT
             )
             if cls.connection.is_connected():
                 logging.info("Conectado a MySQL correctamente.")
@@ -58,7 +59,7 @@ class ChatbotService:
             all_intents = cls.get_all_intents()
             cls.vectorizer.fit(all_intents)
 
-        except Error as e:
+        except mysql.connector.Error as e:
             logging.error(f"Error al conectar a MySQL: {e}")
             raise
         except Exception as e:

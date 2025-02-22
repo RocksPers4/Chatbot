@@ -44,7 +44,12 @@ class ChatbotService:
                 port=Config.MYSQL_PORT
             )
             if cls.connection.is_connected():
-                logging.info("Conectado a MySQL correctamente.")
+                db_info = cls.connection.get_server_info()
+                logging.info(f"Conectado a MySQL servidor versión {db_info}")
+                cursor = cls.connection.cursor()
+                cursor.execute("SELECT DATABASE();")
+                db_name = cursor.fetchone()[0]
+                logging.info(f"Conectado a la base de datos: {db_name}")
 
             # Cargar modelo DistilBERT y tokenizer
             cls.tokenizer = AutoTokenizer.from_pretrained("distilbert-base-multilingual-cased")
@@ -158,6 +163,14 @@ class ChatbotService:
         """
         Genera la respuesta al mensaje del usuario.
         """
+        
+
+        if cls.connection is None or not cls.connection.is_connected():
+            cls.initialize()
+        
+        if cls.connection is None:
+            return "Lo siento, hay un problema de conexión con la base de datos. Por favor, inténtalo más tarde."
+
         if cls.connection is None or cls.model is None:
             cls.initialize()
 

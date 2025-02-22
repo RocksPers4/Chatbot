@@ -3,7 +3,7 @@ import os
 from dotenv import load_dotenv
 
 load_dotenv()
-
+#mysql://root:tQnPxOGTPXzPPRjVexBFZytraYuzuDfF@shuttle.proxy.rlwy.net:55939/railway
 class Config:
     SECRET_KEY = os.environ.get('SECRET_KEY') or 'you-will-never-guess'
     MYSQL_HOST = os.environ.get('MYSQLHOST', 'localhost')

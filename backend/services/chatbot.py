@@ -61,6 +61,7 @@ class ChatbotService:
 
         except mysql.connector.Error as e:
             logging.error(f"Error al conectar a MySQL: {e}")
+            logging.error(f"Configuración: Host={Config.MYSQL_HOST}, User={Config.MYSQL_USER}, DB={Config.MYSQL_DB}, Port={Config.MYSQL_PORT}")
             raise
         except Exception as e:
             logging.error(f"Error al cargar datos o modelo: {str(e)}")

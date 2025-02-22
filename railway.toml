@@ -4,7 +4,7 @@ dockerfilePath = "Dockerfile"
 
 [deploy]
 startCommand = "gunicorn app:app --bind 0.0.0.0:4000"
-healthcheckPath = "/chat"  # Asegúrate de que este endpoint existe en tu backend
+healthcheckPath = "/health"  # Asegúrate de que este endpoint existe en tu backend
 healthcheckTimeout = 300
 
 [env]

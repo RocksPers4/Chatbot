@@ -32,3 +32,7 @@ def feedback():
     
     feedback_response = chatbot.handle_feedback(feedback, last_response)
     return jsonify({"response": feedback_response})
+
+@chat_bp.route('/health', methods=['GET'])
+def healthcheck():
+    return jsonify({"status": "OK"}), 200

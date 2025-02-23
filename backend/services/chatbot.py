@@ -109,8 +109,8 @@ class ChatbotService:
         if cls.qa_pipeline is None:
             logging.info("Cargando modelo TinyBERT")
             try:
-                cls.tokenizer = AutoTokenizer.from_pretrained("prajjwal1/bert-tiny")
-                cls.model = AutoModelForQuestionAnswering.from_pretrained("prajjwal1/bert-tiny")
+                cls.tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased-distilled-squad")
+                cls.model = AutoModelForQuestionAnswering.from_pretrained("distilbert-base-uncased-distilled-squad")
                 cls.qa_pipeline = pipeline("question-answering", model=cls.model, tokenizer=cls.tokenizer)
                 logging.info("Modelo TinyBERT cargado correctamente")
             except Exception as e:

@@ -4,10 +4,12 @@ FROM python:3.9
 WORKDIR /proyecto-chatbot-becas
 
 # Copy built React files
-COPY --from=build-stage /proyecto-chatbot-becas/frontend/build /proyecto-chatbot-becas/frontend/build
+
 
 COPY backend/ ./
 RUN npm run static
+
+COPY --from=build-stage /proyecto-chatbot-becas/frontend/build /proyecto-chatbot-becas/frontend/build
 
 # Backend setup
 WORKDIR /proyecto-chatbot-becas/backend

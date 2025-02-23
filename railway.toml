@@ -3,7 +3,7 @@ builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile"
 
 [deploy]
-startCommand = "gunicorn -w 1 -timeout 120 -b 0.0.0.0:4000 app:app"
+startCommand = "gunicorn -w 1 -t 120 -b 0.0.0.0:4000 app:app"
 healthcheckPath = "/health"  # Asegúrate de que este endpoint existe en tu backend
 healthcheckTimeout = 300
 

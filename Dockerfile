@@ -6,7 +6,7 @@ WORKDIR /proyecto-chatbot-becas/backend
 # Copy built React files
 
 COPY backend/ ./
-RUN npm run static
+RUN npm run build
 
 COPY --from=build-stage /proyecto-chatbot-becas/backend/build /proyecto-chatbot-becas/backend/build
 

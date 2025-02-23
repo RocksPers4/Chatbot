@@ -10,7 +10,7 @@ COPY frontend/package*.json ./
 RUN npm ci --legacy-peer-deps
 
 # Copiar los archivos del frontend y construir la aplicación
-COPY frontend/ . 
+COPY /proyecto-chatbot-becas/frontend/ . 
 RUN npm run build
 
 # Stage 2: Backend (Flask)
@@ -46,7 +46,7 @@ ENV MYSQL_PORT=$MYSQLPORT
 EXPOSE 4000
 
 # Iniciar Flask con Gunicorn
-CMD ["gunicorn", "--workers", "1", "--timeout", "120", "--bind", "0.0.0.0:4000", "app:app"]
+ENTRYPOINT ["gunicorn", "--workers", "1", "--timeout", "120", "--bind", "0.0.0.0:4000", "app:app"]
 
 # Stage 3: Nginx to serve the frontend
 FROM nginx:alpine as frontend-stage

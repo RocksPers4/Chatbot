@@ -46,7 +46,7 @@ ENV MYSQL_PORT=$MYSQLPORT
 EXPOSE 4000
 
 # Iniciar Flask con Gunicorn
-CMD ["gunicorn", "--workers", "1", "--timeout", "120", "--bind", "0.0.0.0:4000", "app:app"]
+ENTRYPOINT ["gunicorn", "--workers", "1", "--timeout", "120", "--bind", "0.0.0.0:4000", "app:app"]
 
 # Stage 3: Nginx to serve the frontend
 FROM nginx:alpine as frontend-stage

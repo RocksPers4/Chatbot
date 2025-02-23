@@ -4,7 +4,7 @@ FROM node:16 as build-stage
 WORKDIR /proyecto-chatbot-becas/frontend
 
 # Copiar archivos de configuración
-COPY frontend/package*.json ./
+COPY /package*.json ./
 
 # Instalar dependencias
 RUN npm ci --legacy-peer-deps

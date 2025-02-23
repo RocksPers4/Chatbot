@@ -4,7 +4,6 @@ import logging
 import mysql.connector
 from mysql.connector import Error
 import torch
-import gc
 from transformers import AutoTokenizer, AutoModelForQuestionAnswering, pipeline
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
@@ -17,15 +16,14 @@ from config import Config
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # Descargar recursos necesarios de NLTK
-nltk.download('punkt')
-nltk.download('stopwords')
+nltk.download('punkt', quiet=True)
+nltk.download('stopwords', quiet=True)
 
 class ChatbotService:
     connection = None
     tokenizer = None
     model = None
     qa_pipeline = None
-    beto_qa_pipeline = None
     vectorizer = None
     conversation_history = []
     stop_words = set(stopwords.words('spanish'))
@@ -104,14 +102,12 @@ class ChatbotService:
 
     @classmethod
     def load_models(cls):
-        """Carga los modelos de IA solo si es necesario."""
+        """Carga el modelo de IA solo si es necesario."""
         if cls.tokenizer is None or cls.model is None:
+            # Usamos un modelo más pequeño: DistilBERT multilingüe
             cls.tokenizer = AutoTokenizer.from_pretrained("distilbert-base-multilingual-cased")
             cls.model = AutoModelForQuestionAnswering.from_pretrained("distilbert-base-multilingual-cased")
             cls.qa_pipeline = pipeline("question-answering", model=cls.model, tokenizer=cls.tokenizer)
-
-        if cls.beto_qa_pipeline is None:
-            cls.beto_qa_pipeline = pipeline("question-answering", model="dccuchile/bert-base-spanish-wwm-cased", tokenizer="dccuchile/bert-base-spanish-wwm-cased")
 
     @classmethod
     def get_bert_response(cls, context, question):
@@ -130,12 +126,6 @@ class ChatbotService:
                     best_answer = result['answer']
                     best_score = result['score']
 
-            # Liberar memoria después de usar el modelo
-            del cls.qa_pipeline
-            del cls.tokenizer
-            del cls.model
-            gc.collect()
-
             return best_answer.strip() if best_answer else "No tengo suficiente información para responder."
 
     @classmethod
@@ -153,13 +143,8 @@ class ChatbotService:
         if intent_response:
             return intent_response
 
-        cls.load_models()
         context = cls.prepare_beca_ayuda_context()
         bert_response = cls.get_bert_response(context, message)
-
-        # Liberar modelos después de usarlos
-        del cls.beto_qa_pipeline
-        gc.collect()
 
         cls.conversation_history.append({"role": "assistant", "content": bert_response})
         return bert_response
@@ -182,6 +167,12 @@ class ChatbotService:
             context += f"{row['nombre']}: {row['descripcion']}. "
         
         return context
+
+    @classmethod
+    def clear_history(cls):
+        """Limpia el historial de conversación."""
+        cls.conversation_history.clear()
+        return "Historial de conversación borrado."
 
 if __name__ == "__main__":
     chatbot = ChatbotService()

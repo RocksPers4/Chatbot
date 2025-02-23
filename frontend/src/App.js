@@ -33,6 +33,11 @@ const App = () => {
     setShowSuggestions(false)
   }
 
+  const clearHistory = () => {
+    localStorage.removeItem("chatHistory")
+    setChatHistory([])
+  }
+
   return (
     <div className="min-h-screen bg-gray-100 flex flex-col">
       <Header
@@ -48,6 +53,7 @@ const App = () => {
           currentMessage={currentMessage}
           setCurrentMessage={setCurrentMessage}
           autoSendTrigger={autoSendTrigger}
+          clearHistory={clearHistory}
         />
       </main>
       <HistoryModal isOpen={showHistory} onClose={() => setShowHistory(false)} history={chatHistory} />

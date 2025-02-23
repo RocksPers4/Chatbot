@@ -49,6 +49,11 @@ def create_app():
     def internal_server_error(error):
         return jsonify({"error": "Error interno del servidor. Por favor, contacta al administrador."}), 500
 
+    @app.route('/api/clear-history', methods=['POST'])
+    def clear_history():
+        ChatbotService.clear_history()
+        return jsonify({"message": "Historial borrado con éxito"}), 200
+
     return app
 
 app = create_app()

@@ -78,6 +78,17 @@ const ChatBot = ({ currentMessage, setCurrentMessage, autoSendTrigger }) => {
     }
   }
 
+  const clearHistory = async () => {
+    try {
+      await axios.post("/api/clear-history")
+      setMessages([])
+      localStorage.removeItem("chatHistory")
+    } catch (error) {
+      console.error("Error al borrar el historial:", error)
+      setError("No se pudo borrar el historial. Por favor, intenta de nuevo más tarde.")
+    }
+  }
+
   return (
     <div className="bg-white shadow-md rounded-lg w-full max-w-lg mx-auto h-[80vh] flex flex-col">
       <div className="flex-grow p-4 overflow-y-auto">
@@ -118,6 +129,12 @@ const ChatBot = ({ currentMessage, setCurrentMessage, autoSendTrigger }) => {
             Enviar
           </button>
         </form>
+        <button
+          onClick={clearHistory}
+          className="w-full bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-500 mt-2"
+        >
+          Borrar Historial
+        </button>
       </div>
     </div>
   )

@@ -146,7 +146,8 @@ class ChatbotService:
                 # Si la puntuación es muy baja, dar respuesta genérica
                 if best_score < 0.1:  
                     return ("Lo siento, no tengo suficiente información para responder a esa pregunta específica. "
-                            "¿Podrías reformularla o preguntar sobre algo más general relacionado con la ESPOCH, becas o ayudas económicas?.")
+                            "¿Podrías reformularla o preguntar sobre algo más general relacionado con la ESPOCH, becas o ayudas económicas?."
+                            "Te recomiendo utilizar el boton de Sugerencias")
 
                 return best_answer.strip()
 

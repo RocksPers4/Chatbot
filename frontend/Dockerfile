@@ -10,7 +10,7 @@ COPY frontend/package*.json ./
 RUN npm ci --legacy-peer-deps
 
 # Copiar los archivos del frontend y construir la aplicación
-COPY /proyecto-chatbot-becas/frontend/ . 
+COPY . . 
 RUN npm run build
 
 # Stage 2: Backend (Flask)

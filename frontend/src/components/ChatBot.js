@@ -47,16 +47,14 @@ const ChatBot = ({ currentMessage, setCurrentMessage, autoSendTrigger }) => {
       const controller = new AbortController()
       const timeoutId = setTimeout(() => controller.abort(), 30000) // 30 segundos de timeout
 
-      const API_URL = process.env.REACT_APP_BACKEND_URL || "http://localhost:4000"; // Usa localhost si no hay variable de entorno
-
       const response = await axios.post(
-        `${API_URL}/chatbot`,  // Usa la URL del backend en Render
+        "/api/chat",
         {
-          user_id: "user123",
+          user_id: "user123", // Implementar sistema de autenticación real en el futuro
           message: currentMessage,
         },
         { signal: controller.signal },
-      );
+      )
 
       clearTimeout(timeoutId)
 

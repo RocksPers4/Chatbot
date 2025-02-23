@@ -52,7 +52,7 @@ CMD ["gunicorn", "--workers", "1", "--timeout", "120", "--bind", "0.0.0.0:4000",
 FROM nginx:alpine as frontend-stage
 
 # Copiar los archivos de la build de React a la carpeta de Nginx
-COPY --from=build-stage /app/build /usr/share/nginx/html
+COPY --from=build-stage /proyecto-chatbot-becas/frontend/build /usr/share/nginx/html
 
 # Exponer el puerto 80
 EXPOSE 80

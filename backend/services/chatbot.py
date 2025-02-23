@@ -106,7 +106,7 @@ class ChatbotService:
     @classmethod
     def load_models(cls):
         """Carga el modelo de IA solo si es necesario."""
-        if cls.tokenizer is None or cls.model is None:
+        if cls.qa_pipeline is None:
             logging.info("Cargando modelo TinyBERT")
             try:
                 cls.tokenizer = AutoTokenizer.from_pretrained("prajjwal1/bert-tiny")
@@ -115,28 +115,36 @@ class ChatbotService:
                 logging.info("Modelo TinyBERT cargado correctamente")
             except Exception as e:
                 logging.error(f"Error al cargar el modelo: {str(e)}")
+                cls.qa_pipeline = None
                 raise
 
     @classmethod
     def get_bert_response(cls, context, question):
         """Genera una respuesta con TinyBERT."""
-        if cls.qa_pipeline is None:
-            cls.load_models()
-        
-        with torch.no_grad():
-            max_length = 512
-            context_chunks = [context[i:i+max_length] for i in range(0, len(context), max_length)]
+        try:
+            if cls.qa_pipeline is None:
+                cls.load_models()
             
-            best_answer = ""
-            best_score = 0
-            
-            for chunk in context_chunks:
-                result = cls.qa_pipeline(question=question, context=chunk)
-                if result['score'] > best_score:
-                    best_answer = result['answer']
-                    best_score = result['score']
+            with torch.no_grad():
+                max_length = 512
+                context_chunks = [context[i:i+max_length] for i in range(0, len(context), max_length)]
+                
+                best_answer = ""
+                best_score = 0
+                
+                for chunk in context_chunks:
+                    result = cls.qa_pipeline(question=question, context=chunk, max_length=50, max_answer_length=30)
+                    if result['score'] > best_score:
+                        best_answer = result['answer']
+                        best_score = result['score']
 
-            return best_answer.strip() if best_answer else "No tengo suficiente información para responder."
+                if best_score < 0.1:  # Si la confianza es muy baja, dar una respuesta genérica
+                    return "Lo siento, no tengo suficiente información para responder a esa pregunta específica. ¿Podrías reformularla o preguntar sobre algo más general relacionado con la ESPOCH, becas o ayudas económicas?"
+
+                return best_answer.strip()
+        except Exception as e:
+            logging.error(f"Error al generar respuesta con TinyBERT: {str(e)}")
+            return "Lo siento, ha ocurrido un error al procesar tu pregunta. Por favor, intenta de nuevo más tarde."
 
     @classmethod
     def get_response(cls, message):
@@ -164,7 +172,8 @@ class ChatbotService:
             bert_response = cls.get_bert_response(context, message)
 
             cls.conversation_history.append({"role": "assistant", "content": bert_response})
-            cls.response_cache[message] = response
+            cls.response_cache[message] = bert_response  # Corregido: usar bert_response en lugar de response
+            return bert_response  # Añadido: retornar bert_response
         except Exception as e:
             logging.error(f"Error al generar respuesta: {str(e)}")    
             return "Lo siento, ha ocurrido un error al procesar tu solicitud. Por favor, intenta de nuevo más tarde."
@@ -172,21 +181,30 @@ class ChatbotService:
     @classmethod
     def prepare_beca_ayuda_context(cls):
         """Prepara el contexto de becas y ayudas económicas."""
-        cursor = cls.connection.cursor(dictionary=True)
-        query = """
-        SELECT b.nombre, b.descripcion FROM becas b
-        UNION
-        SELECT a.nombre, a.descripcion FROM ayudas_economicas a
-        """
-        cursor.execute(query)
-        data = cursor.fetchall()
-        cursor.close()
+        try:
+            cursor = cls.connection.cursor(dictionary=True)
+            query = """
+            SELECT 'Beca' as tipo, b.nombre, b.descripcion FROM becas b
+            UNION ALL
+            SELECT 'Ayuda Económica' as tipo, a.nombre, a.descripcion FROM ayudas_economicas a
+            """
+            cursor.execute(query)
+            data = cursor.fetchall()
+            cursor.close()
 
-        context = "Información sobre becas y ayudas económicas en la ESPOCH: "
-        for row in data:
-            context += f"{row['nombre']}: {row['descripcion']}. "
-        
-        return context
+            context = "Información sobre becas y ayudas económicas en la ESPOCH:\n"
+            for row in data:
+                context += f"{row['tipo']} - {row['nombre']}: {row['descripcion']}\n"
+            
+            # Añadir información general sobre la ESPOCH
+            context += "\nLa ESPOCH (Escuela Superior Politécnica de Chimborazo) es una institución de educación superior pública ubicada en Riobamba, Ecuador. "
+            context += "Fundada en 1972, la ESPOCH se destaca por su excelencia académica y su compromiso con la investigación y el desarrollo tecnológico. "
+            context += "Ofrece una amplia gama de programas de grado y posgrado en áreas como ingeniería, ciencias, administración y tecnología."
+
+            return context
+        except Exception as e:
+            logging.error(f"Error al preparar el contexto: {str(e)}")
+            return "Error al obtener información sobre becas y ayudas económicas."
 
     @classmethod
     def clear_history(cls):

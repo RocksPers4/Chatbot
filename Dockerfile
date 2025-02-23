@@ -9,7 +9,7 @@ WORKDIR /proyecto-chatbot-becas
 COPY backend/ ./
 RUN npm run static
 
-COPY --from=build-stage /proyecto-chatbot-becas/frontend/build /proyecto-chatbot-becas/frontend/build
+COPY --from=build-stage /proyecto-chatbot-becas/backend/static /proyecto-chatbot-becas/backend/static
 
 # Backend setup
 WORKDIR /proyecto-chatbot-becas/backend

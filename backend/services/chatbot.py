@@ -4,7 +4,7 @@ import logging
 import mysql.connector
 from mysql.connector import Error
 import torch
-from transformers import AutoTokenizer, AutoModelForQuestionAnswering, pipeline
+from transformers import AutoTokenizer, AutoModelForQuestionAnswering, AutoModelForCausalLM, pipeline
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 import nltk
@@ -105,14 +105,14 @@ class ChatbotService:
 
     @classmethod
     def load_models(cls):
-        """Carga el modelo de IA solo si es necesario."""
+        """Carga el modelo GLM-4VQ solo si es necesario."""
         if cls.qa_pipeline is None:
-            logging.info("Cargando modelo TinyBERT")
+            logging.info("Cargando modelo GLM-4VQ")
             try:
-                cls.tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased-distilled-squad")
-                cls.model = AutoModelForQuestionAnswering.from_pretrained("distilbert-base-uncased-distilled-squad")
-                cls.qa_pipeline = pipeline("question-answering", model=cls.model, tokenizer=cls.tokenizer)
-                logging.info("Modelo TinyBERT cargado correctamente")
+                cls.tokenizer = AutoTokenizer.from_pretrained("nikravan/glm-4vq")
+                cls.model = AutoModelForCausalLM.from_pretrained("nikravan/glm-4vq", torch_dtype=torch.float16)
+                cls.qa_pipeline = pipeline("text-generation", model=cls.model, tokenizer=cls.tokenizer)
+                logging.info("Modelo GLM-4VQ cargado correctamente")
             except Exception as e:
                 logging.error(f"Error al cargar el modelo: {str(e)}")
                 cls.qa_pipeline = None
@@ -120,43 +120,28 @@ class ChatbotService:
 
     @classmethod
     def get_bert_response(cls, context, question):
-        """Genera una respuesta con TinyBERT."""
+        """Genera una respuesta con GLM-4VQ."""
         try:
-            # Cargar los modelos si aún no se ha cargado el pipeline
+            # Cargar el modelo si aún no se ha inicializado
             if cls.qa_pipeline is None:
                 cls.load_models()
 
-            # Prevenir el cálculo de gradientes
+            # Prevenir el cálculo de gradientes para eficiencia
             with torch.no_grad():
-                max_length = 512  # Limite máximo de tokens por fragmento
-                context_chunks = [context[i:i+max_length] for i in range(0, len(context), max_length-50)]  # Fragmentos con superposición
+                prompt = f"Contexto: {context}\nPregunta: {question}\nRespuesta:"
+                result = cls.qa_pipeline(prompt, max_length=100, num_return_sequences=1)
+
+                best_answer = result[0]['generated_text'].split("Respuesta:")[-1].strip()
                 
-                best_answer = ""
-                best_score = 0  # Empezar con puntaje cero
-
-                # Procesar todos los fragmentos del contexto
-                for chunk in context_chunks:
-                    result = cls.qa_pipeline(question=question, context=chunk, max_length=50, max_answer_length=30)
-
-                    # Comprobar el puntaje y comparar
-                    if result['score'] > best_score:
-                        best_answer = result['answer']
-                        best_score = result['score']
-
-                # Si la puntuación es muy baja, dar respuesta genérica
-                if best_score < 0.3:  # Umbral ajustado
+                # Si la respuesta es muy corta o irrelevante, dar respuesta genérica
+                if len(best_answer) < 10:
                     return ("Lo siento, no tengo suficiente información para responder a esa pregunta específica. "
-                            "¿Podrías reformularla o preguntar sobre algo más general relacionado con la ESPOCH, becas o ayudas económicas?."
-                            "Te recomiendo utilizar el botón de Sugerencias")
+                            "¿Podrías reformularla o preguntar sobre algo más general relacionado con la ESPOCH, becas o ayudas económicas?.")
 
-                return best_answer.strip()
-
-        except (ValueError, KeyError) as e:
-            logging.error(f"Error al generar respuesta con TinyBERT: {str(e)}")
-            return "Lo siento, ha ocurrido un error al procesar tu pregunta. Por favor, intenta de nuevo más tarde."
+                return best_answer
 
         except Exception as e:
-            logging.error(f"Error desconocido: {str(e)}")
+            logging.error(f"Error al generar respuesta con GLM-4VQ: {str(e)}")
             return "Lo siento, ha ocurrido un error inesperado. Intenta nuevamente más tarde."
 
     @classmethod

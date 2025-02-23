@@ -28,4 +28,3 @@ const sugerencias = {
 }
 
 export default sugerencias
-

@@ -122,29 +122,41 @@ class ChatbotService:
     def get_bert_response(cls, context, question):
         """Genera una respuesta con TinyBERT."""
         try:
+            # Cargar los modelos si aún no se ha cargado el pipeline
             if cls.qa_pipeline is None:
                 cls.load_models()
             
+            # Prevenir el cálculo de gradientes
             with torch.no_grad():
-                max_length = 512
+                max_length = 512  # Limite máximo de tokens por fragmento
                 context_chunks = [context[i:i+max_length] for i in range(0, len(context), max_length)]
                 
                 best_answer = ""
-                best_score = 0
-                
+                best_score = 0  # Empezar con puntaje cero
+
+                # Procesar todos los fragmentos del contexto
                 for chunk in context_chunks:
                     result = cls.qa_pipeline(question=question, context=chunk, max_length=50, max_answer_length=30)
+
+                    # Comprobar el puntaje y comparar
                     if result['score'] > best_score:
                         best_answer = result['answer']
                         best_score = result['score']
 
-                if best_score < 0.1:  # Si la confianza es muy baja, dar una respuesta genérica
-                    return "Lo siento, no tengo suficiente información para responder a esa pregunta específica. ¿Podrías reformularla o preguntar sobre algo más general relacionado con la ESPOCH, becas o ayudas económicas?"
+                # Si la puntuación es muy baja, dar respuesta genérica
+                if best_score < 0.1:  
+                    return ("Lo siento, no tengo suficiente información para responder a esa pregunta específica. "
+                            "¿Podrías reformularla o preguntar sobre algo más general relacionado con la ESPOCH, becas o ayudas económicas?.")
 
                 return best_answer.strip()
-        except Exception as e:
+
+        except (ValueError, KeyError) as e:
             logging.error(f"Error al generar respuesta con TinyBERT: {str(e)}")
             return "Lo siento, ha ocurrido un error al procesar tu pregunta. Por favor, intenta de nuevo más tarde."
+
+        except Exception as e:
+            logging.error(f"Error desconocido: {str(e)}")
+            return "Lo siento, ha ocurrido un error inesperado. Intenta nuevamente más tarde."
 
     @classmethod
     def get_response(cls, message):

@@ -1,61 +1,51 @@
-# Stage 1: Build React frontend
+# Build stage for React frontend
 FROM node:16 as build-stage
 
 WORKDIR /proyecto-chatbot-becas/frontend
 
-# Copiar archivos de configuración
-COPY frontend/package*.json ./ 
+# Copy package.json and package-lock.json
+COPY frontend/package*.json ./
 
-# Instalar dependencias
+# Install dependencies
 RUN npm ci --legacy-peer-deps
 
-# Copiar los archivos del frontend y construir la aplicación
-COPY frontend/ . 
+# Copy frontend files and build
+COPY frontend/ ./
 RUN npm run build
 
-# Stage 2: Backend (Flask)
-FROM python:3.9 as backend-stage
+# Production stage for Python backend
+FROM python:3.9
 
 WORKDIR /proyecto-chatbot-becas
 
-# Copiar y instalar dependencias del backend
-COPY backend/requirements.txt .
+# Copy built React files
+COPY --from=build-stage /proyecto-chatbot-becas/frontend/build /proyecto-chatbot-becas/frontend/build
+
+# Backend setup
+WORKDIR /proyecto-chatbot-becas/backend
+COPY backend/requirements.txt .  
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copiar el código del backend
-COPY backend/ /proyecto-chatbot-becas/backend
+COPY ./backend /proyecto-chatbot-becas/backend
 
-# Configurar variables de entorno
+# Set environment variables
 ENV FLASK_APP=app
 ENV FLASK_ENV=production
 ENV PORT=4000
-
-# Configurar variables para MySQL
 ARG MYSQLHOST
 ARG MYSQLUSER
 ARG MYSQLPASSWORD
 ARG MYSQLDATABASE
 ARG MYSQLPORT
+
 ENV MYSQL_HOST=$MYSQLHOST
 ENV MYSQL_USER=$MYSQLUSER
 ENV MYSQL_PASSWORD=$MYSQLPASSWORD
 ENV MYSQL_DB=$MYSQLDATABASE
 ENV MYSQL_PORT=$MYSQLPORT
 
-# Exponer el puerto 4000
+# Expose port
 EXPOSE 4000
 
-# Stage 3: Nginx to serve the frontend
-FROM nginx:alpine as frontend-stage
-
-# Copiar los archivos de la build de React a la carpeta de Nginx
-COPY --from=build-stage /proyecto-chatbot-becas/frontend/build /usr/share/nginx/html
-
-# Exponer el puerto 80
-EXPOSE 80
-
-# Iniciar Nginx con configuración predeterminada
-CMD ["nginx", "-g", "daemon off;"]
-
-# Iniciar Flask con Gunicorn
+# Run the application
 ENTRYPOINT ["gunicorn", "--workers", "1", "--timeout", "120", "--bind", "0.0.0.0:4000", "app:app"]

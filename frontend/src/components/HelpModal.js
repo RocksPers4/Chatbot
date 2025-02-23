@@ -1,30 +1,26 @@
 import React from 'react';
 
 const HelpModal = ({ isOpen, onClose }) => {
-  if (!isOpen) return null;
+  if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-lg p-6 max-w-lg w-full">
-        <h2 className="text-2xl font-bold mb-4">Ayuda para Becas y Ayudas Económicas</h2>
-        <p>Para más información: <a href='https://www.espoch.edu.ec/becas-prueba/' className="text-blue-500 hover:underline">Becas y Ayudas Economicas</a></p>
-        {/* https://www.espoch.edu.ec/becas-prueba/ */}
-        <div>
-        <a h2 href="https://becas.espoch.edu.ec/becario" className="text-blue-500 hover:underline">Llenar mi Ficha</a>
-        </div>
-        <div>
-        <a h2 href="https://forms.office.com/r/FrghAuRVbC" className="text-blue-500 hover:underline">Cuestionario</a>
-        </div>
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center p-4 z-50">
+      <div className="bg-white rounded-lg p-6 w-full max-w-lg max-h-[80vh] overflow-y-auto">
+        <h2 className="text-2xl font-bold mb-4">Ayuda</h2>
+        <p className="mb-4">
+          Este chatbot está diseñado para ayudarte con información sobre becas y ayudas económicas en la ESPOCH.
+          Puedes hacer preguntas sobre tipos de becas, requisitos, fechas de aplicación, y más.
+        </p>
         <button
           onClick={onClose}
-          className="mt-4 bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
+          className="mt-4 bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 transition-colors duration-200"
         >
           Cerrar
         </button>
       </div>
     </div>
-  );
-};
+  )
+}
 
 export default HelpModal;
 

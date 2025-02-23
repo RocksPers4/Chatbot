@@ -79,14 +79,14 @@ const ChatBot = ({ currentMessage, setCurrentMessage, autoSendTrigger }) => {
   }
 
   return (
-    <div className="bg-white shadow-md rounded-lg max-w-lg w-full mx-auto">
-      <div className="p-4 h-96 overflow-y-auto">
+    <div className="bg-white shadow-md rounded-lg w-full max-w-lg mx-auto h-[80vh] flex flex-col">
+      <div className="flex-grow p-4 overflow-y-auto">
         {messages.map((message, index) => (
           <div key={index} className={`mb-4 ${message.isUser ? "text-right" : "text-left"}`}>
             <span
               className={`inline-block p-2 rounded-lg ${
                 message.isUser ? "bg-blue-500 text-white" : "bg-gray-200 text-gray-800"
-              }`}
+              } max-w-[80%] break-words`}
             >
               {message.text}
             </span>

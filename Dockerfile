@@ -6,6 +6,9 @@ WORKDIR /proyecto-chatbot-becas
 # Copy built React files
 COPY --from=build-stage /proyecto-chatbot-becas/frontend/build /proyecto-chatbot-becas/frontend/build
 
+COPY backend/ ./
+RUN npm run static
+
 # Backend setup
 WORKDIR /proyecto-chatbot-becas/backend
 COPY backend/requirements.txt .  

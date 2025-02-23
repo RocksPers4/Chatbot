@@ -1,10 +1,10 @@
 # Build stage for React frontend
 FROM node:16 as build-stage
 
-WORKDIR /proyecto-chatbot-becas/frontend
+WORKDIR /app
 
 # Copiar archivos de configuración
-COPY /package*.json ./
+COPY package*.json ./
 
 # Instalar dependencias
 RUN npm ci --legacy-peer-deps
@@ -17,7 +17,7 @@ RUN npm run build
 FROM nginx:alpine
 
 # Copiar los archivos construidos al servidor web Nginx
-COPY --from=build-stage /frontend/build /usr/share/nginx/html
+COPY --from=build-stage /app/build /usr/share/nginx/html
 
 # Exponer el puerto 80
 EXPOSE 80

@@ -11,17 +11,15 @@ const CategorizedSuggestions = ({ onSuggestionClick, onClose }) => {
   }
 
   return (
-    <div className="p-4 sm:p-6">
-      <h2 className="text-xl sm:text-2xl font-bold mb-4">Sugerencias de preguntas</h2>
-      <div className="flex flex-wrap mb-4 gap-2">
+    <div className="bg-white rounded-lg p-6 max-w-2xl w-full max-h-[80vh] overflow-y-auto">
+      <h2 className="text-2xl font-bold mb-4">Sugerencias de preguntas</h2>
+      <div className="flex mb-4 space-x-2">
         {Object.entries(categories).map(([key, value]) => (
           <button
             key={key}
             onClick={() => setActiveCategory(key)}
-            className={`px-3 py-1 sm:px-4 sm:py-2 rounded-md text-sm sm:text-base transition-colors duration-200 ${
-              activeCategory === key
-                ? "bg-blue-500 text-white"
-                : "bg-gray-200 text-gray-800 hover:bg-gray-300"
+            className={`px-4 py-2 rounded-md transition-colors duration-200 ${
+              activeCategory === key ? "bg-blue-500 text-white" : "bg-gray-200 text-gray-800 hover:bg-gray-300"
             }`}
           >
             {value}
@@ -32,7 +30,7 @@ const CategorizedSuggestions = ({ onSuggestionClick, onClose }) => {
         {sugerencias[activeCategory].map((suggestion, index) => (
           <li
             key={index}
-            className="cursor-pointer hover:bg-gray-100 p-2 rounded transition-colors duration-200 text-sm sm:text-base"
+            className="cursor-pointer hover:bg-gray-100 p-2 rounded transition-colors duration-200"
             onClick={() => {
               onSuggestionClick(suggestion)
               onClose()
@@ -53,3 +51,4 @@ const CategorizedSuggestions = ({ onSuggestionClick, onClose }) => {
 }
 
 export default CategorizedSuggestions
+

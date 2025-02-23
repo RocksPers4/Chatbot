@@ -48,5 +48,5 @@ ENV MYSQL_PORT=$MYSQLPORT
 EXPOSE 4000
 
 # Run the application
-ENTRYPOINT ["gunicorn", "-w", "1", "-b", "0.0.0.0:4000", "app:app"]
+ENTRYPOINT ["gunicorn", "--workers", "1", "--timeout", "120", "--bind", "0.0.0.0:4000", "app:app"]
 

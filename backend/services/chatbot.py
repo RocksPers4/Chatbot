@@ -18,6 +18,8 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 # Descargar recursos necesarios de NLTK
 nltk.download('punkt', quiet=True)
 nltk.download('stopwords', quiet=True)
+torch.set_num_threads(1)
+torch.set_num_interop_threads(1)
 
 class ChatbotService:
     connection = None
@@ -27,6 +29,7 @@ class ChatbotService:
     vectorizer = None
     conversation_history = []
     stop_words = set(stopwords.words('spanish'))
+    response_cache = {}
 
     @classmethod
     def initialize(cls):
@@ -104,15 +107,22 @@ class ChatbotService:
     def load_models(cls):
         """Carga el modelo de IA solo si es necesario."""
         if cls.tokenizer is None or cls.model is None:
-            # Usamos un modelo más pequeño: DistilBERT multilingüe
-            cls.tokenizer = AutoTokenizer.from_pretrained("distilbert-base-multilingual-cased")
-            cls.model = AutoModelForQuestionAnswering.from_pretrained("distilbert-base-multilingual-cased")
-            cls.qa_pipeline = pipeline("question-answering", model=cls.model, tokenizer=cls.tokenizer)
+            logging.info("Cargando modelo TinyBERT")
+            try:
+                cls.tokenizer = AutoTokenizer.from_pretrained("prajjwal1/bert-tiny")
+                cls.model = AutoModelForQuestionAnswering.from_pretrained("prajjwal1/bert-tiny")
+                cls.qa_pipeline = pipeline("question-answering", model=cls.model, tokenizer=cls.tokenizer)
+                logging.info("Modelo TinyBERT cargado correctamente")
+            except Exception as e:
+                logging.error(f"Error al cargar el modelo: {str(e)}")
+                raise
 
     @classmethod
     def get_bert_response(cls, context, question):
-        """Genera una respuesta con DistilBERT."""
-        cls.load_models()
+        """Genera una respuesta con TinyBERT."""
+        if cls.qa_pipeline is None:
+            cls.load_models()
+        
         with torch.no_grad():
             max_length = 512
             context_chunks = [context[i:i+max_length] for i in range(0, len(context), max_length)]
@@ -131,23 +141,33 @@ class ChatbotService:
     @classmethod
     def get_response(cls, message):
         """Genera la respuesta al mensaje del usuario."""
-        if cls.connection is None or not cls.connection.is_connected():
-            cls.initialize()
+        logging.info(f"Recibido mensaje: {message}")
+        try:
+            if cls.connection is None or not cls.connection.is_connected():
+                cls.initialize()
 
-        cls.conversation_history.append({"role": "user", "content": message})
+            cls.conversation_history.append({"role": "user", "content": message})
 
-        if len(cls.conversation_history) > 5:
-            cls.conversation_history.pop(0)
+            if len(cls.conversation_history) > 5:
+                cls.conversation_history.pop(0)
 
-        intent_response = cls.match_intent(message)
-        if intent_response:
-            return intent_response
+            intent_response = cls.match_intent(message)
+            if intent_response:
+                return intent_response
 
-        context = cls.prepare_beca_ayuda_context()
-        bert_response = cls.get_bert_response(context, message)
+            # Verificar si la respuesta está en caché
+            if message in cls.response_cache:
+                logging.info("Respuesta encontrada en caché")
+                return cls.response_cache[message]
 
-        cls.conversation_history.append({"role": "assistant", "content": bert_response})
-        return bert_response
+            context = cls.prepare_beca_ayuda_context()
+            bert_response = cls.get_bert_response(context, message)
+
+            cls.conversation_history.append({"role": "assistant", "content": bert_response})
+            cls.response_cache[message] = response
+        except Exception as e:
+            logging.error(f"Error al generar respuesta: {str(e)}")    
+            return "Lo siento, ha ocurrido un error al procesar tu solicitud. Por favor, intenta de nuevo más tarde."
 
     @classmethod
     def prepare_beca_ayuda_context(cls):

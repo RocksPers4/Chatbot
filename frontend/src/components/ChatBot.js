@@ -48,7 +48,7 @@ const ChatBot = ({ currentMessage, setCurrentMessage, autoSendTrigger }) => {
       const timeoutId = setTimeout(() => controller.abort(), 30000) // 30 segundos de timeout
 
       const response = await axios.post(
-        "http://localhost:5000/chat",
+        "/api/chat",
         {
           user_id: "user123", // Implementar sistema de autenticación real en el futuro
           message: currentMessage,

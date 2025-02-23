@@ -1,18 +1,3 @@
-# Build stage for React frontend
-FROM node:16 as build-stage
-
-WORKDIR /proyecto-chatbot-becas/frontend
-
-# Copy package.json and package-lock.json
-COPY frontend/package*.json ./
-
-# Install dependencies
-RUN npm ci --legacy-peer-deps
-
-# Copy frontend files and build
-COPY frontend/ ./
-RUN npm run build
-
 # Production stage for Python backend
 FROM python:3.9
 

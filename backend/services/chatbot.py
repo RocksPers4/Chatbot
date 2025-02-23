@@ -125,11 +125,11 @@ class ChatbotService:
             # Cargar los modelos si aún no se ha cargado el pipeline
             if cls.qa_pipeline is None:
                 cls.load_models()
-            
+
             # Prevenir el cálculo de gradientes
             with torch.no_grad():
                 max_length = 512  # Limite máximo de tokens por fragmento
-                context_chunks = [context[i:i+max_length] for i in range(0, len(context), max_length)]
+                context_chunks = [context[i:i+max_length] for i in range(0, len(context), max_length-50)]  # Fragmentos con superposición
                 
                 best_answer = ""
                 best_score = 0  # Empezar con puntaje cero
@@ -144,10 +144,10 @@ class ChatbotService:
                         best_score = result['score']
 
                 # Si la puntuación es muy baja, dar respuesta genérica
-                if best_score < 0.1:  
+                if best_score < 0.3:  # Umbral ajustado
                     return ("Lo siento, no tengo suficiente información para responder a esa pregunta específica. "
                             "¿Podrías reformularla o preguntar sobre algo más general relacionado con la ESPOCH, becas o ayudas económicas?."
-                            "Te recomiendo utilizar el boton de Sugerencias")
+                            "Te recomiendo utilizar el botón de Sugerencias")
 
                 return best_answer.strip()
 

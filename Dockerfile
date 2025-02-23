@@ -1,15 +1,14 @@
 # Production stage for Python backend
 FROM python:3.9
 
-WORKDIR /proyecto-chatbot-becas
+WORKDIR /proyecto-chatbot-becas/backend
 
 # Copy built React files
-
 
 COPY backend/ ./
 RUN npm run static
 
-COPY --from=build-stage /proyecto-chatbot-becas/backend/static /proyecto-chatbot-becas/backend/static
+COPY --from=build-stage /proyecto-chatbot-becas/backend/build /proyecto-chatbot-becas/backend/build
 
 # Backend setup
 WORKDIR /proyecto-chatbot-becas/backend

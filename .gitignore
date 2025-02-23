@@ -24,3 +24,5 @@ Thumbs.db
 # Archivos de IDE
 .vscode/
 .idea/
+
+test_render.py

@@ -22,6 +22,16 @@ def create_app():
     # Registrar el Blueprint para las rutas
     app.register_blueprint(chat_bp)
 
+    @app.route("/chatbot", methods=["POST"])  # Asegúrate de que "POST" está en la lista de métodos
+    def chatbot():
+        data = request.get_json()
+
+        if not data or "message" not in data:
+            return jsonify({"error": "Falta el campo 'message'"}), 400
+
+        respuesta = "Aquí iría la respuesta del chatbot"
+        return jsonify({"response": respuesta})
+
     @app.route('/', defaults={'path': ''})
     @app.route('/<path:path>')
     def serve(path):

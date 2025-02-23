@@ -1,32 +1,14 @@
-# Build stage for React frontend
-FROM node:16 as build-stage
+# Stage 1: Base image for Python backend
+FROM python:3.9 AS backend-stage
 
-WORKDIR /proyecto-chatbot-becas/frontend
-
-# Copy package.json and package-lock.json
-COPY frontend/package*.json ./
-
-# Install dependencies
-RUN npm ci --legacy-peer-deps
-
-# Copy frontend files and build
-COPY frontend/ ./
-RUN npm run build
-
-# Production stage for Python backend
-FROM python:3.9
-
-WORKDIR /proyecto-chatbot-becas
-
-# Copy built React files
-COPY --from=build-stage /proyecto-chatbot-becas/frontend/build /proyecto-chatbot-becas/frontend/build
-
-# Backend setup
 WORKDIR /proyecto-chatbot-becas/backend
+
+# Copy requirements.txt to install dependencies
 COPY backend/requirements.txt .  
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY ./backend /proyecto-chatbot-becas/backend
+# Copy the entire backend code
+COPY backend/ /proyecto-chatbot-becas/backend
 
 # Set environment variables
 ENV FLASK_APP=app
@@ -47,6 +29,5 @@ ENV MYSQL_PORT=$MYSQLPORT
 # Expose port
 EXPOSE 4000
 
-# Run the application
+# Run the application using Gunicorn
 ENTRYPOINT ["gunicorn", "--workers", "1", "--timeout", "120", "--bind", "0.0.0.0:4000", "app:app"]
-

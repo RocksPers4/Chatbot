@@ -4,7 +4,7 @@ import logging
 import mysql.connector
 from mysql.connector import Error
 import torch
-from transformers import AutoTokenizer, AutoModelForQuestionAnswering, AutoModelForCausalLM, pipeline
+from transformers import AutoModelForCausalLM, ChatGLM4Tokenizer, pipeline
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 import nltk
@@ -109,7 +109,8 @@ class ChatbotService:
         if cls.qa_pipeline is None:
             logging.info("Cargando modelo GLM-4VQ")
             try:
-                cls.tokenizer = AutoTokenizer.from_pretrained("nikravan/glm-4vq")
+                # Cargar el tokenizador correcto
+                cls.tokenizer = ChatGLM4Tokenizer.from_pretrained("nikravan/glm-4vq")
                 cls.model = AutoModelForCausalLM.from_pretrained("nikravan/glm-4vq", torch_dtype=torch.float16)
                 cls.qa_pipeline = pipeline("text-generation", model=cls.model, tokenizer=cls.tokenizer)
                 logging.info("Modelo GLM-4VQ cargado correctamente")
@@ -122,28 +123,24 @@ class ChatbotService:
     def get_bert_response(cls, context, question):
         """Genera una respuesta con GLM-4VQ."""
         try:
-            # Cargar el modelo si aún no se ha inicializado
             if cls.qa_pipeline is None:
                 cls.load_models()
 
-            # Prevenir el cálculo de gradientes para eficiencia
             with torch.no_grad():
                 prompt = f"Contexto: {context}\nPregunta: {question}\nRespuesta:"
                 result = cls.qa_pipeline(prompt, max_length=100, num_return_sequences=1)
 
                 best_answer = result[0]['generated_text'].split("Respuesta:")[-1].strip()
-                
-                # Si la respuesta es muy corta o irrelevante, dar respuesta genérica
+
                 if len(best_answer) < 10:
-                    return ("Lo siento, no tengo suficiente información para responder a esa pregunta específica. "
-                            "¿Podrías reformularla o preguntar sobre algo más general relacionado con la ESPOCH, becas o ayudas económicas?.")
+                    return "Lo siento, no tengo suficiente información para responder a esa pregunta."
 
                 return best_answer
 
         except Exception as e:
             logging.error(f"Error al generar respuesta con GLM-4VQ: {str(e)}")
             return "Lo siento, ha ocurrido un error inesperado. Intenta nuevamente más tarde."
-
+        
     @classmethod
     def get_response(cls, message):
         """Genera la respuesta al mensaje del usuario."""

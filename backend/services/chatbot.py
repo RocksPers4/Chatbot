@@ -171,11 +171,11 @@ class ChatbotService:
                 return cls.response_cache[message]
 
             context = cls.prepare_beca_ayuda_context()
-            bert_response = cls.get_bert_response(context, message)
+            glm_response = cls.get_glm_response(context, message)
 
-            cls.conversation_history.append({"role": "assistant", "content": bert_response})
-            cls.response_cache[message] = bert_response  # Corregido: usar bert_response en lugar de response
-            return bert_response  # Añadido: retornar bert_response
+            cls.conversation_history.append({"role": "assistant", "content": glm_response})
+            cls.response_cache[message] = glm_response  # Corregido: usar bert_response en lugar de response
+            return glm_response  # Añadido: retornar bert_response
         except Exception as e:
             logging.error(f"Error al generar respuesta: {str(e)}")    
             return "Lo siento, ha ocurrido un error al procesar tu solicitud. Por favor, intenta de nuevo más tarde."

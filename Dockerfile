@@ -24,7 +24,8 @@ COPY --from=build-stage /proyecto-chatbot-becas/frontend/build /proyecto-chatbot
 # Backend setup
 WORKDIR /proyecto-chatbot-becas/backend
 COPY backend/requirements.txt .  
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
 
 COPY ./backend /proyecto-chatbot-becas/backend
 
@@ -43,6 +44,9 @@ ENV MYSQL_USER=$MYSQLUSER
 ENV MYSQL_PASSWORD=$MYSQLPASSWORD
 ENV MYSQL_DB=$MYSQLDATABASE
 ENV MYSQL_PORT=$MYSQLPORT
+
+ENV PYTHONUNBUFFERED=1
+ENV TRANSFORMERS_OFFLINE=1
 
 # Expose port
 EXPOSE 4000

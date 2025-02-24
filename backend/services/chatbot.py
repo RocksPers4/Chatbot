@@ -1,4 +1,5 @@
 import os
+import gc
 import random
 import logging
 import mysql.connector
@@ -11,6 +12,7 @@ import nltk
 from nltk.tokenize import word_tokenize
 from nltk.corpus import stopwords
 from config import Config
+from functools import lru_cache
 
 # Configuración de logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -21,6 +23,17 @@ nltk.download('stopwords', quiet=True)
 torch.set_num_threads(1)
 torch.set_num_interop_threads(1)
 
+@lru_cache(maxsize=1)
+def get_model_and_tokenizer(model_name):
+    tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
+    model = AutoModelForCausalLM.from_pretrained(
+        model_name,
+        torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
+        device_map="auto",
+        trust_remote_code=True
+    )
+    return model, tokenizer
+
 class ChatbotService:
     model_name = "nikravan/glm-4vq"
     connection = None
@@ -30,6 +43,15 @@ class ChatbotService:
     conversation_history = []
     stop_words = set(stopwords.words('spanish'))
     response_cache = {}
+
+    @classmethod
+    def unload_models(cls):
+        del cls.model
+        del cls.tokenizer
+        gc.collect()
+        torch.cuda.empty_cache()
+        cls.model = None
+        cls.tokenizer = None
 
     @classmethod
     def initialize(cls):
@@ -113,7 +135,8 @@ class ChatbotService:
                 cls.model = AutoModelForCausalLM.from_pretrained(
                     cls.model_name, 
                     torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
-                    device_map="auto"
+                    device_map="auto",
+                    trust_remote_code=True
                 )
                 logging.info("Modelo GLM-4VQ cargado correctamente")
             except Exception as e:
@@ -145,7 +168,7 @@ class ChatbotService:
 
         except Exception as e:
             logging.error(f"Error al generar respuesta con GLM-4VQ: {str(e)}")
-            return "Lo siento, ha ocurrido un error inesperado. Intenta nuevamente más tarde."
+            return "Lo siento, ha ocurrido un error inesperado al procesar tu pregunta. Por favor, intenta nuevamente más tarde."
 
     @classmethod
     def get_response(cls, message):

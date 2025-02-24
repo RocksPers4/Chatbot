@@ -4,7 +4,7 @@ import logging
 import mysql.connector
 from mysql.connector import Error
 import torch
-from transformers import AutoModelForCausalLM, ChatGLM4Tokenizer, pipeline
+from transformers import AutoModelForCausalLM, AutoTokenizer
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 import nltk
@@ -22,6 +22,7 @@ torch.set_num_threads(1)
 torch.set_num_interop_threads(1)
 
 class ChatbotService:
+    model_name = "nikravan/glm-4vq"
     connection = None
     tokenizer = None
     model = None
@@ -106,36 +107,42 @@ class ChatbotService:
     @classmethod
     def load_models(cls):
         """Carga el modelo GLM-4VQ solo si es necesario."""
-        if cls.qa_pipeline is None:
+        if cls.model is None or cls.tokenizer is None:
             logging.info("Cargando modelo GLM-4VQ")
             try:
-                # Cargar el tokenizador correcto
-                cls.tokenizer = ChatGLM4Tokenizer.from_pretrained("nikravan/glm-4vq")
-                cls.model = AutoModelForCausalLM.from_pretrained("nikravan/glm-4vq", torch_dtype=torch.float16)
-                cls.qa_pipeline = pipeline("text-generation", model=cls.model, tokenizer=cls.tokenizer)
+                cls.tokenizer = AutoTokenizer.from_pretrained(cls.model_name, trust_remote_code=True)
+                cls.model = AutoModelForCausalLM.from_pretrained(
+                    cls.model_name, 
+                    torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
+                    device_map="auto"  # Mueve automáticamente el modelo a GPU si está disponible
+                )
                 logging.info("Modelo GLM-4VQ cargado correctamente")
             except Exception as e:
                 logging.error(f"Error al cargar el modelo: {str(e)}")
-                cls.qa_pipeline = None
+                cls.model = None
+                cls.tokenizer = None
                 raise
 
     @classmethod
-    def get_bert_response(cls, context, question):
+    def get_glm_response(cls, context, question):
         """Genera una respuesta con GLM-4VQ."""
         try:
-            if cls.qa_pipeline is None:
+            if cls.model is None or cls.tokenizer is None:
                 cls.load_models()
 
+            prompt = f"Contexto: {context}\nPregunta: {question}\nRespuesta:"
+            inputs = cls.tokenizer(prompt, return_tensors="pt").to(cls.model.device)
+
             with torch.no_grad():
-                prompt = f"Contexto: {context}\nPregunta: {question}\nRespuesta:"
-                result = cls.qa_pipeline(prompt, max_length=100, num_return_sequences=1)
+                output = cls.model.generate(**inputs, max_length=100, num_return_sequences=1)
 
-                best_answer = result[0]['generated_text'].split("Respuesta:")[-1].strip()
+            best_answer = cls.tokenizer.decode(output[0], skip_special_tokens=True)
+            best_answer = best_answer.split("Respuesta:")[-1].strip()
 
-                if len(best_answer) < 10:
-                    return "Lo siento, no tengo suficiente información para responder a esa pregunta."
+            if len(best_answer) < 10:
+                return "Lo siento, no tengo suficiente información para responder a esa pregunta."
 
-                return best_answer
+            return best_answer
 
         except Exception as e:
             logging.error(f"Error al generar respuesta con GLM-4VQ: {str(e)}")

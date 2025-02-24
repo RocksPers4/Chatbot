@@ -25,6 +25,17 @@ nltk.download('stopwords', quiet=True)
 torch.set_num_threads(1)
 torch.set_num_interop_threads(1)
 
+@lru_cache(maxsize=1)
+def get_model_and_tokenizer(model_name):
+    tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
+    model = AutoModelForCausalLM.from_pretrained(
+        model_name,
+        torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
+        device_map="auto",
+        trust_remote_code=True
+    )
+    return model, tokenizer
+
 
 import logging
 from logging.handlers import RotatingFileHandler
@@ -47,17 +58,6 @@ def setup_logging():
 
 # Llamar a esta función al inicio de tu aplicación
 setup_logging()
-
-@lru_cache(maxsize=1)
-def get_model_and_tokenizer(model_name):
-    tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
-    model = AutoModelForCausalLM.from_pretrained(
-        model_name,
-        torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
-        device_map="auto",
-        trust_remote_code=True
-    )
-    return model, tokenizer
 
 class ChatbotService:
     model_name = "nikravan/glm-4vq"
@@ -205,6 +205,9 @@ class ChatbotService:
         """Genera la respuesta al mensaje del usuario."""
         logging.info(f"Recibido mensaje: {message}")
         try:
+            if cls.connection is None or not cls.connection.is_connected():
+                cls.initialize()
+            
             if cls.model is None or cls.tokenizer is None:
                 cls.load_models()
 

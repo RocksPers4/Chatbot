@@ -26,7 +26,6 @@ class ChatbotService:
     connection = None
     tokenizer = None
     model = None
-    qa_pipeline = None
     vectorizer = None
     conversation_history = []
     stop_words = set(stopwords.words('spanish'))
@@ -114,7 +113,7 @@ class ChatbotService:
                 cls.model = AutoModelForCausalLM.from_pretrained(
                     cls.model_name, 
                     torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
-                    device_map="auto"  # Mueve automáticamente el modelo a GPU si está disponible
+                    device_map="auto"
                 )
                 logging.info("Modelo GLM-4VQ cargado correctamente")
             except Exception as e:
@@ -147,7 +146,7 @@ class ChatbotService:
         except Exception as e:
             logging.error(f"Error al generar respuesta con GLM-4VQ: {str(e)}")
             return "Lo siento, ha ocurrido un error inesperado. Intenta nuevamente más tarde."
-        
+
     @classmethod
     def get_response(cls, message):
         """Genera la respuesta al mensaje del usuario."""
@@ -165,7 +164,6 @@ class ChatbotService:
             if intent_response:
                 return intent_response
 
-            # Verificar si la respuesta está en caché
             if message in cls.response_cache:
                 logging.info("Respuesta encontrada en caché")
                 return cls.response_cache[message]
@@ -174,8 +172,8 @@ class ChatbotService:
             glm_response = cls.get_glm_response(context, message)
 
             cls.conversation_history.append({"role": "assistant", "content": glm_response})
-            cls.response_cache[message] = glm_response  # Corregido: usar bert_response en lugar de response
-            return glm_response  # Añadido: retornar bert_response
+            cls.response_cache[message] = glm_response
+            return glm_response
         except Exception as e:
             logging.error(f"Error al generar respuesta: {str(e)}")    
             return "Lo siento, ha ocurrido un error al procesar tu solicitud. Por favor, intenta de nuevo más tarde."
@@ -198,7 +196,6 @@ class ChatbotService:
             for row in data:
                 context += f"{row['tipo']} - {row['nombre']}: {row['descripcion']}\n"
             
-            # Añadir información general sobre la ESPOCH
             context += "\nLa ESPOCH (Escuela Superior Politécnica de Chimborazo) es una institución de educación superior pública ubicada en Riobamba, Ecuador. "
             context += "Fundada en 1972, la ESPOCH se destaca por su excelencia académica y su compromiso con la investigación y el desarrollo tecnológico. "
             context += "Ofrece una amplia gama de programas de grado y posgrado en áreas como ingeniería, ciencias, administración y tecnología."

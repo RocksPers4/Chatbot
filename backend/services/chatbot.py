@@ -13,6 +13,8 @@ from nltk.tokenize import word_tokenize
 from nltk.corpus import stopwords
 from config import Config
 from functools import lru_cache
+import time
+from requests.exceptions import RequestException
 
 # Configuración de logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -22,6 +24,29 @@ nltk.download('punkt', quiet=True)
 nltk.download('stopwords', quiet=True)
 torch.set_num_threads(1)
 torch.set_num_interop_threads(1)
+
+
+import logging
+from logging.handlers import RotatingFileHandler
+
+def setup_logging():
+    log_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+    log_file = 'chatbot.log'
+    log_handler = RotatingFileHandler(log_file, maxBytes=1024 * 1024, backupCount=5)
+    log_handler.setFormatter(log_formatter)
+    log_handler.setLevel(logging.INFO)
+    
+    app_log = logging.getLogger('werkzeug')
+    app_log.setLevel(logging.INFO)
+    app_log.addHandler(log_handler)
+
+    # Añadir también logging a la consola
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(log_formatter)
+    app_log.addHandler(console_handler)
+
+# Llamar a esta función al inicio de tu aplicación
+setup_logging()
 
 @lru_cache(maxsize=1)
 def get_model_and_tokenizer(model_name):
@@ -126,11 +151,10 @@ class ChatbotService:
             return None
 
     @classmethod
-    def load_models(cls):
-        """Carga el modelo GLM-4VQ solo si es necesario."""
-        if cls.model is None or cls.tokenizer is None:
-            logging.info("Cargando modelo GLM-4VQ")
+    def load_models(cls, max_retries=3, retry_delay=5):
+        for attempt in range(max_retries):
             try:
+                logging.info(f"Intento {attempt + 1} de cargar el modelo GLM-4VQ")
                 cls.tokenizer = AutoTokenizer.from_pretrained(cls.model_name, trust_remote_code=True)
                 cls.model = AutoModelForCausalLM.from_pretrained(
                     cls.model_name, 
@@ -139,11 +163,17 @@ class ChatbotService:
                     trust_remote_code=True
                 )
                 logging.info("Modelo GLM-4VQ cargado correctamente")
-            except Exception as e:
-                logging.error(f"Error al cargar el modelo: {str(e)}")
-                cls.model = None
-                cls.tokenizer = None
-                raise
+                return
+            except (RequestException, OSError) as e:
+                logging.error(f"Error al cargar el modelo (intento {attempt + 1}): {str(e)}")
+                if attempt < max_retries - 1:
+                    logging.info(f"Reintentando en {retry_delay} segundos...")
+                    time.sleep(retry_delay)
+                else:
+                    logging.error("Se agotaron los intentos de carga del modelo")
+                    cls.model = None
+                    cls.tokenizer = None
+                    raise
 
     @classmethod
     def get_glm_response(cls, context, question):
@@ -175,8 +205,8 @@ class ChatbotService:
         """Genera la respuesta al mensaje del usuario."""
         logging.info(f"Recibido mensaje: {message}")
         try:
-            if cls.connection is None or not cls.connection.is_connected():
-                cls.initialize()
+            if cls.model is None or cls.tokenizer is None:
+                cls.load_models()
 
             cls.conversation_history.append({"role": "user", "content": message})
 
@@ -198,8 +228,18 @@ class ChatbotService:
             cls.response_cache[message] = glm_response
             return glm_response
         except Exception as e:
-            logging.error(f"Error al generar respuesta: {str(e)}")    
-            return "Lo siento, ha ocurrido un error al procesar tu solicitud. Por favor, intenta de nuevo más tarde."
+            logging.error(f"Error al generar respuesta con GLM-4VQ: {str(e)}")
+            return cls.fallback_response(message)
+
+    @classmethod
+    def fallback_response(cls, message):
+        # Implementa aquí una lógica simple de respuesta basada en palabras clave
+        if "ESPOCH" in message:
+            return "La ESPOCH es una institución de educación superior ubicada en Riobamba, Ecuador."
+        elif "beca" in message:
+            return "La ESPOCH ofrece varios tipos de becas. Te recomiendo contactar con la oficina de bienestar estudiantil para más información."
+        else:
+            return "Lo siento, no puedo proporcionar una respuesta en este momento. Por favor, contacta directamente con la ESPOCH para obtener información precisa."
 
     @classmethod
     def prepare_beca_ayuda_context(cls):

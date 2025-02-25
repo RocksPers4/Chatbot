@@ -146,7 +146,8 @@ class ChatbotService:
                 # Si la puntuación es muy baja, dar respuesta genérica
                 if best_score < 0.1:  
                     return ("Lo siento, no tengo suficiente información para responder a esa pregunta específica. "
-                            "¿Podrías reformularla o preguntar sobre algo más general relacionado con la ESPOCH, becas o ayudas económicas?.")
+                            "¿Podrías reformularla o preguntar sobre algo más general relacionado con la ESPOCH, becas o ayudas económicas?."
+                            "Te recomiendo utilizar el botón de Sugerencias")
 
                 return best_answer.strip()
 
@@ -188,7 +189,19 @@ class ChatbotService:
             return bert_response  # Añadido: retornar bert_response
         except Exception as e:
             logging.error(f"Error al generar respuesta: {str(e)}")    
-            return "Lo siento, ha ocurrido un error al procesar tu solicitud. Por favor, intenta de nuevo más tarde."
+            return "Lo siento, ha ocurrido un error al procesar tu solicitud. Por favor, intenta de nuevo más tarde.", cls.fallback_response(message)
+
+
+    @classmethod
+    def fallback_response(cls, message):
+        # Implementa aquí una lógica simple de respuesta basada en palabras clave
+        if "ESPOCH" in message:
+            return "La ESPOCH es una institución de educación superior ubicada en Riobamba, Ecuador."
+        elif "beca" in message:
+            return "La ESPOCH ofrece varios tipos de becas. Te recomiendo contactar con la oficina de bienestar estudiantil para más información."
+        else:
+            return "Lo siento, no puedo proporcionar una respuesta en este momento. Por favor, contacta directamente con la ESPOCH para obtener información precisa."
+
 
     @classmethod
     def prepare_beca_ayuda_context(cls):

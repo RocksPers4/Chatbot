@@ -58,8 +58,8 @@ class ChatbotService:
     def _initialize_model(cls):
         logging.info("Cargando modelo DistilBERT")
         try:
-            cls.tokenizer = AutoTokenizer.from_pretrained("distilbert-base-multilingual-cased-distilled-squad")
-            cls.model = AutoModelForQuestionAnswering.from_pretrained("distilbert-base-multilingual-cased-distilled-squad")
+            cls.tokenizer = AutoTokenizer.from_pretrained("distilbert-base-multilingual-cased")
+            cls.model = AutoModelForQuestionAnswering.from_pretrained("distilbert-base-multilingual-cased")
             cls.qa_pipeline = pipeline("question-answering", model=cls.model, tokenizer=cls.tokenizer)
             logging.info("Modelo DistilBERT cargado correctamente")
         except Exception as e:

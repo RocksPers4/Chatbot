@@ -3,11 +3,12 @@ import React from 'react';
 const AnimatedLogo = () => {
   return (
     <div className="flex items-center">
+      {/* Logo estático SVG */}
       <svg
         className="w-10 h-10 mr-2 animate-bounce"
         viewBox="0 0 100 100"
         fill="none"
-        xmlns="https://www.canva.com/join/dkd-tyq-zxq"
+        xmlns="http://www.w3.org/2000/svg"
       >
         <path
           d="M50 95C74.8528 95 95 74.8528 95 50C95 25.1472 74.8528 5 50 5C25.1472 5 5 25.1472 5 50C5 74.8528 25.1472 95 50 95Z"
@@ -34,6 +35,15 @@ const AnimatedLogo = () => {
           fill="white"
         />
       </svg>
+
+      {/* Placeholder para el logo animado de Canva */}
+      {/* Reemplaza 'ruta_a_tu_logo_animado' con la ruta real a tu archivo */}
+      <img 
+        src="./frontend.src.Logo_chat.gif" 
+        alt="Logo animado" 
+        className="w-10 h-10 mr-2"
+      />
+
       <span className="text-2xl font-bold">PochiBot</span>
     </div>
   );

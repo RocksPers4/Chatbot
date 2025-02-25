@@ -7,7 +7,7 @@ const AnimatedLogo = () => {
         className="w-10 h-10 mr-2 animate-bounce"
         viewBox="0 0 100 100"
         fill="none"
-        xmlns="http://www.w3.org/2000/svg"
+        xmlns="https://www.canva.com/join/dkd-tyq-zxq"
       >
         <path
           d="M50 95C74.8528 95 95 74.8528 95 50C95 25.1472 74.8528 5 50 5C25.1472 5 5 25.1472 5 50C5 74.8528 25.1472 95 50 95Z"

@@ -1,4 +1,3 @@
-# backend/app.py
 import os
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
@@ -20,17 +19,7 @@ def create_app():
     ChatbotService.initialize()
 
     # Registrar el Blueprint para las rutas
-    app.register_blueprint(chat_bp)
-
-    @app.route("/chatbot", methods=["POST"])  # Asegúrate de que "POST" está en la lista de métodos
-    def chatbot():
-        data = request.get_json()
-
-        if not data or "message" not in data:
-            return jsonify({"error": "Falta el campo 'message'"}), 400
-
-        respuesta = "Aquí iría la respuesta del chatbot"
-        return jsonify({"response": respuesta})
+    app.register_blueprint(chat_bp, url_prefix='/api')
 
     @app.route('/', defaults={'path': ''})
     @app.route('/<path:path>')
@@ -48,21 +37,9 @@ def create_app():
             "database_connected": is_db_connected
         }), 200 if is_db_connected else 500
 
-    @app.route('/api/chat', methods=['POST'])
-    def chat():
-        data = request.json
-        message = data.get('message', '')
-        response = ChatbotService.get_response(message)
-        return jsonify({"response": response})
-
     @app.errorhandler(500)
     def internal_server_error(error):
         return jsonify({"error": "Error interno del servidor. Por favor, contacta al administrador."}), 500
-
-    @app.route('/api/clear-history', methods=['POST'])
-    def clear_history():
-        ChatbotService.clear_history()
-        return jsonify({"message": "Historial borrado con éxito"}), 200
 
     return app
 

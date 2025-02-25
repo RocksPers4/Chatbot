@@ -1,13 +1,12 @@
 import os
+import random
 import logging
 import mysql.connector
 from mysql.connector import Error
 import torch
 from transformers import AutoTokenizer, AutoModelForQuestionAnswering, pipeline
 from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
 import nltk
-from nltk.tokenize import word_tokenize
 from nltk.corpus import stopwords
 from config import Config
 
@@ -32,7 +31,12 @@ class ChatbotService:
 
     @classmethod
     def initialize(cls):
-        """Inicializa la conexión a la base de datos."""
+        """Inicializa la conexión a la base de datos y el modelo."""
+        cls._initialize_database()
+        cls._initialize_model()
+
+    @classmethod
+    def _initialize_database(cls):
         try:
             cls.connection = mysql.connector.connect(
                 host=Config.MYSQL_HOST,
@@ -45,14 +49,26 @@ class ChatbotService:
                 logging.info("Conectado a MySQL correctamente.")
 
             cls.vectorizer = TfidfVectorizer(stop_words=list(cls.stop_words))
-            cls.vectorizer.fit(cls.get_all_intents())
-
+            cls.vectorizer.fit(cls._get_all_intents())
         except mysql.connector.Error as e:
             logging.error(f"Error al conectar a MySQL: {e}")
             raise
 
     @classmethod
-    def get_all_intents(cls):
+    def _initialize_model(cls):
+        logging.info("Cargando modelo DistilBERT")
+        try:
+            cls.tokenizer = AutoTokenizer.from_pretrained("distilbert-base-multilingual-cased-distilled-squad")
+            cls.model = AutoModelForQuestionAnswering.from_pretrained("distilbert-base-multilingual-cased-distilled-squad")
+            cls.qa_pipeline = pipeline("question-answering", model=cls.model, tokenizer=cls.tokenizer)
+            logging.info("Modelo DistilBERT cargado correctamente")
+        except Exception as e:
+            logging.error(f"Error al cargar el modelo: {str(e)}")
+            cls.qa_pipeline = None
+            raise
+
+    @classmethod
+    def _get_all_intents(cls):
         """Obtiene todas las preguntas de intents de la base de datos."""
         try:
             cursor = cls.connection.cursor()
@@ -103,60 +119,36 @@ class ChatbotService:
             return None
 
     @classmethod
-    def load_models(cls):
-        """Carga el modelo de IA solo si es necesario."""
-        if cls.qa_pipeline is None:
-            logging.info("Cargando modelo TinyBERT")
-            try:
-                cls.tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased-distilled-squad")
-                cls.model = AutoModelForQuestionAnswering.from_pretrained("distilbert-base-uncased-distilled-squad")
-                cls.qa_pipeline = pipeline("question-answering", model=cls.model, tokenizer=cls.tokenizer)
-                logging.info("Modelo TinyBERT cargado correctamente")
-            except Exception as e:
-                logging.error(f"Error al cargar el modelo: {str(e)}")
-                cls.qa_pipeline = None
-                raise
-
-    @classmethod
     def get_bert_response(cls, context, question):
-        """Genera una respuesta con TinyBERT."""
+        """Genera una respuesta con DistilBERT."""
         try:
-            # Cargar los modelos si aún no se ha cargado el pipeline
             if cls.qa_pipeline is None:
-                cls.load_models()
+                cls._initialize_model()
 
-            # Prevenir el cálculo de gradientes
             with torch.no_grad():
-                max_length = 512  # Limite máximo de tokens por fragmento
-                context_chunks = [context[i:i+max_length] for i in range(0, len(context), max_length-50)]  # Fragmentos con superposición
+                max_length = 512
+                context_chunks = [context[i:i+max_length] for i in range(0, len(context), max_length-50)]
                 
                 best_answer = ""
-                best_score = 0  # Empezar con puntaje cero
+                best_score = 0
 
-                # Procesar todos los fragmentos del contexto
                 for chunk in context_chunks:
                     result = cls.qa_pipeline(question=question, context=chunk, max_length=50, max_answer_length=30)
 
-                    # Comprobar el puntaje y comparar
                     if result['score'] > best_score:
                         best_answer = result['answer']
                         best_score = result['score']
 
-                # Si la puntuación es muy baja, dar respuesta genérica
-                if best_score < 0.3:  # Umbral ajustado
+                if best_score < 0.3:
                     return ("Lo siento, no tengo suficiente información para responder a esa pregunta específica. "
-                            "¿Podrías reformularla o preguntar sobre algo más general relacionado con la ESPOCH, becas o ayudas económicas?."
-                            "Te recomiendo utilizar el botón de Sugerencias")
+                            "¿Podrías reformularla o preguntar sobre algo más general relacionado con la ESPOCH, becas o ayudas económicas? "
+                            "Te recomiendo utilizar el botón de Sugerencias.")
 
                 return best_answer.strip()
 
-        except (ValueError, KeyError) as e:
-            logging.error(f"Error al generar respuesta con TinyBERT: {str(e)}")
-            return "Lo siento, ha ocurrido un error al procesar tu pregunta. Por favor, intenta de nuevo más tarde."
-
         except Exception as e:
-            logging.error(f"Error desconocido: {str(e)}")
-            return "Lo siento, ha ocurrido un error inesperado. Intenta nuevamente más tarde."
+            logging.error(f"Error al generar respuesta con DistilBERT: {str(e)}")
+            return "Lo siento, ha ocurrido un error al procesar tu pregunta. Por favor, intenta de nuevo más tarde."
 
     @classmethod
     def get_response(cls, message):
@@ -167,7 +159,6 @@ class ChatbotService:
                 cls.initialize()
 
             cls.conversation_history.append({"role": "user", "content": message})
-
             if len(cls.conversation_history) > 5:
                 cls.conversation_history.pop(0)
 
@@ -175,23 +166,22 @@ class ChatbotService:
             if intent_response:
                 return intent_response
 
-            # Verificar si la respuesta está en caché
             if message in cls.response_cache:
                 logging.info("Respuesta encontrada en caché")
                 return cls.response_cache[message]
 
-            context = cls.prepare_beca_ayuda_context()
+            context = cls._prepare_beca_ayuda_context()
             bert_response = cls.get_bert_response(context, message)
 
             cls.conversation_history.append({"role": "assistant", "content": bert_response})
-            cls.response_cache[message] = bert_response  # Corregido: usar bert_response en lugar de response
-            return bert_response  # Añadido: retornar bert_response
+            cls.response_cache[message] = bert_response
+            return bert_response
         except Exception as e:
             logging.error(f"Error al generar respuesta: {str(e)}")    
             return "Lo siento, ha ocurrido un error al procesar tu solicitud. Por favor, intenta de nuevo más tarde."
 
     @classmethod
-    def prepare_beca_ayuda_context(cls):
+    def _prepare_beca_ayuda_context(cls):
         """Prepara el contexto de becas y ayudas económicas."""
         try:
             cursor = cls.connection.cursor(dictionary=True)
@@ -208,7 +198,6 @@ class ChatbotService:
             for row in data:
                 context += f"{row['tipo']} - {row['nombre']}: {row['descripcion']}\n"
             
-            # Añadir información general sobre la ESPOCH
             context += "\nLa ESPOCH (Escuela Superior Politécnica de Chimborazo) es una institución de educación superior pública ubicada en Riobamba, Ecuador. "
             context += "Fundada en 1972, la ESPOCH se destaca por su excelencia académica y su compromiso con la investigación y el desarrollo tecnológico. "
             context += "Ofrece una amplia gama de programas de grado y posgrado en áreas como ingeniería, ciencias, administración y tecnología."
@@ -226,6 +215,7 @@ class ChatbotService:
 
 if __name__ == "__main__":
     chatbot = ChatbotService()
+    chatbot.initialize()
     print("Chatbot: Hola, soy PochiBot. ¿En qué puedo ayudarte hoy?")
     while True:
         user_input = input("Tú: ")

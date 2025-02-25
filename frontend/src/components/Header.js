@@ -7,7 +7,6 @@ const Header = ({ onHistoryClick, onHelpClick, onSuggestionsClick }) => {
       <div className="container mx-auto flex flex-col sm:flex-row justify-between items-center">
         <div className="flex items-center mb-4 sm:mb-0">
           <AnimatedLogo className="w-12 h-12 mr-4" />
-          <h1 className="text-2xl font-bold">ESPOCH Chatbot</h1>
         </div>
         <nav className="flex flex-wrap justify-center sm:justify-end space-y-2 sm:space-y-0 sm:space-x-2">
           <button

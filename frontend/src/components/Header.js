@@ -1,4 +1,3 @@
-import React from 'react';
 import AnimatedLogo from './AnimatedLogo';
 
 const Header = ({ onHistoryClick, onHelpClick, onSuggestionsClick }) => {

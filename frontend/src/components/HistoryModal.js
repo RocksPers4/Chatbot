@@ -1,5 +1,3 @@
-import React from 'react';
-
 const HistoryModal = ({ isOpen, onClose, history }) => {
   if (!isOpen) return null
 

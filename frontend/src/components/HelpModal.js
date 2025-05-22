@@ -1,5 +1,3 @@
-import React from 'react';
-
 const HelpModal = ({ isOpen, onClose }) => {
   if (!isOpen) return null;
 

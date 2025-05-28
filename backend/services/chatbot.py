@@ -19,7 +19,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 # Descargar recursos necesarios de NLTK
 nltk.download('punkt', quiet=True)
 nltk.download('stopwords', quiet=True)
-torch.set_num_threads(2)  # Aumentado para mejor rendimiento
+torch.set_num_threads(2)
 torch.set_num_interop_threads(1)
 
 class ChatbotService:
@@ -27,38 +27,11 @@ class ChatbotService:
     tokenizer = None
     model = None
     qa_pipeline = None
-    generation_pipeline = None  # Nuevo: pipeline de generación
+    generation_pipeline = None
     vectorizer = None
     conversation_history = []
     stop_words = set(stopwords.words('spanish'))
     response_cache = {}
-    
-    # Nueva: Base de conocimientos expandida para preguntas generales
-    knowledge_base = {
-        "general_espoch": [
-            "La ESPOCH Sede Orellana está ubicada en la provincia de Orellana, Ecuador, en la región amazónica.",
-            "Ofrece carreras en áreas de ingeniería, administración, ciencias de la salud y tecnología.",
-            "El período académico está dividido en dos semestres por año: septiembre-febrero y marzo-agosto.",
-            "La biblioteca está abierta de lunes a viernes de 7:00 a 21:00 y sábados de 8:00 a 16:00.",
-            "El campus cuenta con laboratorios especializados, áreas deportivas, cafetería y residencia estudiantil."
-        ],
-        "carreras": [
-            "Ingeniería en Tecnologías de la Información",
-            "Ingeniería en Biotecnología Ambiental", 
-            "Ingeniería en Zootecnia",
-            "Ingeniería Ambiental",
-            "Agronomía",
-            "Turismo"
-        ],
-        "servicios": [
-            "Biblioteca con acceso a bases de datos académicas",
-            "Laboratorios de computación y ciencias",
-            "Servicio médico estudiantil",
-            "Cafetería y comedor estudiantil",
-            "Áreas deportivas y recreativas",
-            "Departamento de Bienestar Estudiantil"
-        ]
-    }
 
     @classmethod
     def initialize(cls):
@@ -76,6 +49,9 @@ class ChatbotService:
 
             cls.vectorizer = TfidfVectorizer(stop_words=list(cls.stop_words))
             cls.vectorizer.fit(cls.get_all_intents())
+            
+            # Cargar modelos de IA
+            cls._load_models()
 
         except mysql.connector.Error as e:
             logging.error(f"Error al conectar a MySQL: {e}")
@@ -133,90 +109,54 @@ class ChatbotService:
             return None
 
     @classmethod
-    def load_models(cls):
-        """Carga los modelos de IA mejorados."""
-        if cls.qa_pipeline is None:
+    def _load_models(cls):
+        """Carga los modelos de IA."""
+        try:
+            # Cargar modelo de generación de texto en español
+            logging.info("Cargando modelo de generación de texto...")
+            generation_model_name = "PlanTL-GOB-ES/gpt2-base-bne"
+            cls.tokenizer = AutoTokenizer.from_pretrained(generation_model_name)
+            cls.model = AutoModelForCausalLM.from_pretrained(generation_model_name)
+            
+            # Configurar pad_token si no existe
+            if cls.tokenizer.pad_token is None:
+                cls.tokenizer.pad_token = cls.tokenizer.eos_token
+            
+            cls.generation_pipeline = pipeline(
+                "text-generation",
+                model=cls.model,
+                tokenizer=cls.tokenizer,
+                device=-1,  # CPU
+                max_length=200,
+                do_sample=True,
+                temperature=0.7,
+                pad_token_id=cls.tokenizer.eos_token_id
+            )
+            logging.info("Modelo de generación cargado correctamente")
+            
+            # Cargar modelo de Question Answering como respaldo
+            logging.info("Cargando modelo de Question Answering...")
+            qa_model_name = "mrm8488/distill-bert-base-spanish-wwm-cased-finetuned-spa-squad2-es"
+            cls.qa_pipeline = pipeline(
+                "question-answering",
+                model=qa_model_name,
+                tokenizer=qa_model_name,
+                device=-1  # CPU
+            )
+            logging.info("Modelo de Question Answering cargado correctamente")
+            
+        except Exception as e:
+            logging.error(f"Error al cargar modelos avanzados: {str(e)}")
+            # Fallback al modelo original
+            logging.info("Cargando modelo TinyBERT como respaldo...")
             try:
-                # Cargar modelo de Question Answering en español (mejorado)
-                logging.info("Cargando modelo de Question Answering en español...")
-                qa_model_name = "mrm8488/distill-bert-base-spanish-wwm-cased-finetuned-spa-squad2-es"
-                cls.qa_pipeline = pipeline(
-                    "question-answering",
-                    model=qa_model_name,
-                    tokenizer=qa_model_name,
-                    device=-1  # CPU
-                )
-                logging.info("Modelo de Question Answering cargado correctamente")
-                
-                # Cargar modelo de generación para respuestas más naturales
-                logging.info("Cargando modelo de generación de texto...")
-                generation_model_name = "PlanTL-GOB-ES/gpt2-base-bne"
-                cls.tokenizer = AutoTokenizer.from_pretrained(generation_model_name)
-                cls.model = AutoModelForCausalLM.from_pretrained(generation_model_name)
-                
-                # Configurar pad_token si no existe
-                if cls.tokenizer.pad_token is None:
-                    cls.tokenizer.pad_token = cls.tokenizer.eos_token
-                
-                cls.generation_pipeline = pipeline(
-                    "text-generation",
-                    model=cls.model,
-                    tokenizer=cls.tokenizer,
-                    device=-1,
-                    max_length=150,
-                    do_sample=True,
-                    temperature=0.7,
-                    pad_token_id=cls.tokenizer.eos_token_id
-                )
-                logging.info("Modelo de generación cargado correctamente")
-                
-            except Exception as e:
-                logging.error(f"Error al cargar modelos mejorados: {str(e)}")
-                # Fallback al modelo original
-                logging.info("Cargando modelo TinyBERT como respaldo...")
-                try:
-                    cls.tokenizer = AutoTokenizer.from_pretrained("prajjwal1/bert-tiny")
-                    cls.model = AutoModelForQuestionAnswering.from_pretrained("prajjwal1/bert-tiny")
-                    cls.qa_pipeline = pipeline("question-answering", model=cls.model, tokenizer=cls.tokenizer)
-                    logging.info("Modelo TinyBERT cargado como respaldo")
-                except Exception as fallback_error:
-                    logging.error(f"Error al cargar modelo de respaldo: {str(fallback_error)}")
-                    cls.qa_pipeline = None
-
-    @classmethod
-    def _detect_general_intent(cls, message):
-        """Detecta si la pregunta es sobre temas generales de la ESPOCH."""
-        message_lower = message.lower()
-        
-        general_keywords = {
-            "carreras": ["carrera", "carreras", "estudiar", "programa", "ingeniería", "administración", "ambiental"],
-            "servicios": ["servicio", "servicios", "biblioteca", "laboratorio", "cafetería", "comedor", "deporte"],
-            "general_espoch": ["espoch", "universidad", "campus", "sede", "orellana", "ubicación", "información"]
-        }
-        
-        for category, keywords in general_keywords.items():
-            for keyword in keywords:
-                if keyword in message_lower:
-                    return category
-        return None
-
-    @classmethod
-    def _get_knowledge_response(cls, category, message):
-        """Obtiene una respuesta de la base de conocimientos."""
-        if category in cls.knowledge_base:
-            responses = cls.knowledge_base[category]
-            # Seleccionar respuesta más relevante usando similitud
-            try:
-                if cls.vectorizer:
-                    message_vec = cls.vectorizer.transform([message])
-                    response_vecs = cls.vectorizer.transform(responses)
-                    similarities = cosine_similarity(message_vec, response_vecs)[0]
-                    best_idx = np.argmax(similarities)
-                    return responses[best_idx]
-            except:
-                pass
-            return random.choice(responses)
-        return None
+                cls.tokenizer = AutoTokenizer.from_pretrained("prajjwal1/bert-tiny")
+                cls.model = AutoModelForQuestionAnswering.from_pretrained("prajjwal1/bert-tiny")
+                cls.qa_pipeline = pipeline("question-answering", model=cls.model, tokenizer=cls.tokenizer)
+                logging.info("Modelo TinyBERT cargado como respaldo")
+            except Exception as fallback_error:
+                logging.error(f"Error al cargar modelo de respaldo: {str(fallback_error)}")
+                cls.qa_pipeline = None
 
     @classmethod
     def get_response(cls, message):
@@ -226,14 +166,15 @@ class ChatbotService:
             if cls.connection is None or not cls.connection.is_connected():
                 cls.initialize()
 
+            # Actualizar historial de conversación
             cls.conversation_history.append({"role": "user", "content": message})
-
-            if len(cls.conversation_history) > 10:  # Aumentado el historial
+            if len(cls.conversation_history) > 10:
                 cls.conversation_history = cls.conversation_history[-10:]
 
-            # 1. Buscar intent directo en la base de datos
+            # 1. Buscar intent directo en la base de datos (respuestas predefinidas)
             intent_response = cls.match_intent(message)
             if intent_response:
+                cls.conversation_history.append({"role": "assistant", "content": intent_response})
                 return intent_response
 
             # 2. Verificar caché
@@ -241,18 +182,17 @@ class ChatbotService:
                 logging.info("Respuesta encontrada en caché")
                 return cls.response_cache[message]
 
-            # 3. Detectar si es pregunta general
-            general_category = cls._detect_general_intent(message)
-            if general_category:
-                knowledge_response = cls._get_knowledge_response(general_category, message)
-                if knowledge_response:
-                    cls.response_cache[message] = knowledge_response
-                    return knowledge_response
+            # 3. Generar respuesta con el modelo de lenguaje
+            generated_response = cls._generate_ai_response(message)
+            if generated_response:
+                cls.conversation_history.append({"role": "assistant", "content": generated_response})
+                cls.response_cache[message] = generated_response
+                return generated_response
 
-            # 4. Usar contexto de becas y IA
+            # 4. Si la generación falla, usar el modelo de QA con contexto
             context = cls.prepare_beca_ayuda_context()
-            bert_response = cls.get_bert_response(context, message)
-
+            bert_response = cls._get_qa_response(context, message)
+            
             cls.conversation_history.append({"role": "assistant", "content": bert_response})
             cls.response_cache[message] = bert_response
             return bert_response
@@ -261,6 +201,55 @@ class ChatbotService:
             logging.error(f"Error al generar respuesta: {str(e)}")    
             return "Lo siento, ha ocurrido un error al procesar tu solicitud. Por favor, intenta de nuevo más tarde."
         
+    @classmethod
+    def _generate_ai_response(cls, message):
+        """Genera una respuesta usando el modelo de lenguaje."""
+        try:
+            if cls.generation_pipeline is None:
+                return None
+                
+            # Preparar el contexto con el historial de conversación
+            conversation_context = ""
+            # Usar las últimas 3 interacciones para contexto
+            recent_history = cls.conversation_history[-6:] if len(cls.conversation_history) > 6 else cls.conversation_history
+            
+            for item in recent_history:
+                role = "Usuario: " if item["role"] == "user" else "PochiBot: "
+                conversation_context += role + item["content"] + "\n"
+            
+            # Añadir información sobre el rol del chatbot
+            system_prompt = "PochiBot es un asistente virtual de la ESPOCH Sede Orellana que ayuda a estudiantes con información sobre becas, ayudas económicas, carreras y servicios universitarios.\n\n"
+            
+            # Crear el prompt completo
+            prompt = system_prompt + conversation_context + "PochiBot: "
+            
+            # Generar respuesta
+            result = cls.generation_pipeline(
+                prompt,
+                max_length=len(prompt.split()) + 50,  # Permitir respuestas más largas
+                num_return_sequences=1,
+                temperature=0.8,  # Aumentar creatividad
+                top_p=0.92,
+                do_sample=True,
+                pad_token_id=cls.tokenizer.eos_token_id
+            )
+            
+            # Extraer solo la respuesta generada
+            generated_text = result[0]['generated_text']
+            response = generated_text.split("PochiBot: ")[-1].strip()
+            
+            # Verificar que la respuesta sea adecuada
+            if len(response) > 10 and "Usuario:" not in response:
+                # Limpiar posibles artefactos
+                response = response.split("\n")[0]
+                return response
+                
+            return None
+            
+        except Exception as e:
+            logging.error(f"Error al generar respuesta con IA: {str(e)}")
+            return None
+            
     @classmethod
     def prepare_beca_ayuda_context(cls):
         """Prepara el contexto de becas y ayudas económicas."""
@@ -275,14 +264,14 @@ class ChatbotService:
             data = cursor.fetchall()
             cursor.close()
 
-            context = "Información sobre becas y ayudas económicas en la ESPOCH Sede Orellana:\n"
+            context = "Información sobre becas y ayudas económicas en la ESPOCH:\n"
             for row in data:
                 context += f"{row['tipo']} - {row['nombre']}: {row['descripcion']}\n"
             
-            # Información expandida sobre la ESPOCH
-            context += "\nLa ESPOCH Sede Orellana es una extensión de la Escuela Superior Politécnica de Chimborazo ubicada en la provincia de Orellana, Ecuador. "
-            context += "Se especializa en carreras relacionadas con la región amazónica como Ingeniería en Biotecnología Ambiental, Agronomía, y otras. "
-            context += "Ofrece servicios estudiantiles completos incluyendo biblioteca, laboratorios, bienestar estudiantil y actividades deportivas."
+            # Añadir información general sobre la ESPOCH
+            context += "\nLa ESPOCH (Escuela Superior Politécnica de Chimborazo) es una institución de educación superior pública ubicada en Riobamba, Ecuador. "
+            context += "Fundada en 1972, la ESPOCH se destaca por su excelencia académica y su compromiso con la investigación y el desarrollo tecnológico. "
+            context += "Ofrece una amplia gama de programas de grado y posgrado en áreas como ingeniería, ciencias, administración y tecnología."
 
             return context
         except Exception as e:
@@ -290,60 +279,40 @@ class ChatbotService:
             return "Error al obtener información sobre becas y ayudas económicas."
 
     @classmethod
-    def get_bert_response(cls, context, question):
-        """Genera una respuesta mejorada con los nuevos modelos."""
+    def _get_qa_response(cls, context, question):
+        """Genera una respuesta usando el modelo de Question Answering."""
         try:
             # Cargar los modelos si aún no se ha cargado el pipeline
             if cls.qa_pipeline is None:
-                cls.load_models()
+                cls._load_models()
             
             # Prevenir el cálculo de gradientes
             with torch.no_grad():
-                max_length = 512
+                max_length = 512  # Limite máximo de tokens por fragmento
                 context_chunks = [context[i:i+max_length] for i in range(0, len(context), max_length)]
                 
                 best_answer = ""
-                best_score = 0
+                best_score = 0  # Empezar con puntaje cero
 
-                # Procesar con el modelo de QA mejorado
+                # Procesar todos los fragmentos del contexto
                 for chunk in context_chunks:
-                    result = cls.qa_pipeline(question=question, context=chunk, max_length=100, max_answer_length=50)
+                    result = cls.qa_pipeline(question=question, context=chunk, max_length=50, max_answer_length=30)
 
+                    # Comprobar el puntaje y comparar
                     if result['score'] > best_score:
                         best_answer = result['answer']
                         best_score = result['score']
 
-                # Si la puntuación es alta, usar la respuesta del QA
-                if best_score > 0.6:
-                    return best_answer.strip()
-                
-                # Si la puntuación es media, intentar generar respuesta más natural
-                elif best_score > 0.3 and cls.generation_pipeline:
-                    try:
-                        prompt = f"Pregunta: {question}\nContexto: {context[:200]}...\nRespuesta:"
-                        generated = cls.generation_pipeline(
-                            prompt,
-                            max_length=len(prompt.split()) + 30,
-                            num_return_sequences=1,
-                            temperature=0.7,
-                            do_sample=True,
-                            pad_token_id=cls.tokenizer.eos_token_id
-                        )
-                        
-                        response = generated[0]['generated_text'].split("Respuesta:")[-1].strip()
-                        if len(response) > 10 and len(response) < 200:
-                            return response
-                    except Exception as gen_error:
-                        logging.error(f"Error en generación: {gen_error}")
-                
-                # Respuesta genérica mejorada
-                return ("Lo siento, no tengo información específica sobre esa consulta. "
-                       "Puedo ayudarte con información sobre becas, ayudas económicas, carreras disponibles, "
-                       "servicios universitarios y aspectos generales de la ESPOCH Sede Orellana. "
-                       "Te recomiendo utilizar el botón de Sugerencias para ver temas disponibles.")
+                # Si la puntuación es muy baja, dar respuesta genérica
+                if best_score < 0.5:  
+                    return ("Lo siento, no tengo suficiente información para responder a esa pregunta específica. "
+                            "¿Podrías reformularla o preguntar sobre algo más general relacionado con la ESPOCH, becas o ayudas económicas?."
+                            "Te recomiendo utilizar el botón de Sugerencias")
+
+                return best_answer.strip()
 
         except (ValueError, KeyError) as e:
-            logging.error(f"Error al generar respuesta: {str(e)}")
+            logging.error(f"Error al generar respuesta con QA: {str(e)}")
             return "Lo siento, ha ocurrido un error al procesar tu pregunta. Por favor, intenta de nuevo más tarde."
 
         except Exception as e:
@@ -368,7 +337,6 @@ class ChatbotService:
     def clear_history(cls):
         """Limpia el historial de conversación."""
         cls.conversation_history.clear()
-        cls.response_cache.clear()  # También limpiar caché
         return "Historial de conversación borrado."
 
 if __name__ == "__main__":

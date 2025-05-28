@@ -112,20 +112,7 @@ class ChatbotService:
     def _load_models(cls):
         """Carga los modelos de IA."""
         try:
-            # Cargar modelo de generación de texto en español
-            logging.info("Cargando modelo de generación de texto...")
-            generation_model_name = "PlanTL-GOB-ES/gpt2-base-bne"
-            cls.tokenizer = AutoTokenizer.from_pretrained(generation_model_name)
-            cls.model = AutoModelForCausalLM.from_pretrained(generation_model_name)
-            
-            # Configurar pad_token si no existe
-            if cls.tokenizer.pad_token is None:
-                cls.tokenizer.pad_token = cls.tokenizer.eos_token
-            
-            # No usar pipeline, usar el modelo directamente para mejor control
-            logging.info("Modelo de generación cargado correctamente")
-            
-            # Cargar modelo de Question Answering como respaldo
+            # Cargar modelo de Question Answering como principal
             logging.info("Cargando modelo de Question Answering...")
             qa_model_name = "mrm8488/distill-bert-base-spanish-wwm-cased-finetuned-spa-squad2-es"
             cls.qa_pipeline = pipeline(
@@ -135,6 +122,22 @@ class ChatbotService:
                 device=-1  # CPU
             )
             logging.info("Modelo de Question Answering cargado correctamente")
+            
+            # Cargar modelo de generación solo como respaldo
+            try:
+                logging.info("Cargando modelo de generación de texto...")
+                generation_model_name = "PlanTL-GOB-ES/gpt2-base-bne"
+                cls.tokenizer = AutoTokenizer.from_pretrained(generation_model_name)
+                cls.model = AutoModelForCausalLM.from_pretrained(generation_model_name)
+                
+                if cls.tokenizer.pad_token is None:
+                    cls.tokenizer.pad_token = cls.tokenizer.eos_token
+                
+                logging.info("Modelo de generación cargado correctamente")
+            except Exception as gen_error:
+                logging.warning(f"No se pudo cargar el modelo de generación: {gen_error}")
+                cls.model = None
+                cls.tokenizer = None
             
         except Exception as e:
             logging.error(f"Error al cargar modelos avanzados: {str(e)}")
@@ -148,6 +151,29 @@ class ChatbotService:
             except Exception as fallback_error:
                 logging.error(f"Error al cargar modelo de respaldo: {str(fallback_error)}")
                 cls.qa_pipeline = None
+
+    @classmethod
+    def _is_espoch_related(cls, message):
+        """Determina si la pregunta está relacionada con ESPOCH, becas o ayudas."""
+        message_lower = message.lower()
+        
+        # Palabras clave relacionadas con ESPOCH y becas
+        espoch_keywords = [
+            'beca', 'becas', 'ayuda económica', 'ayudas económicas', 'financiamiento',
+            'espoch', 'universidad', 'carrera', 'carreras', 'estudios', 'estudiante',
+            'matrícula', 'requisitos', 'solicitud', 'aplicar', 'postular',
+            'orellana', 'sede', 'campus', 'biblioteca', 'laboratorio',
+            'ingeniería', 'administración', 'enfermería', 'agronomía', 'turismo',
+            'biotecnología', 'sistemas', 'computación', 'bienestar estudiantil',
+            'servicios', 'académico', 'semestre', 'período académico'
+        ]
+        
+        # Verificar si contiene palabras clave
+        for keyword in espoch_keywords:
+            if keyword in message_lower:
+                return True
+        
+        return False
 
     @classmethod
     def get_response(cls, message):
@@ -173,85 +199,53 @@ class ChatbotService:
                 logging.info("Respuesta encontrada en caché")
                 return cls.response_cache[message]
 
-            # 3. Generar respuesta con el modelo de lenguaje
-            generated_response = cls._generate_ai_response(message)
-            if generated_response:
-                cls.conversation_history.append({"role": "assistant", "content": generated_response})
-                cls.response_cache[message] = generated_response
-                return generated_response
-
-            # 4. Si la generación falla, usar el modelo de QA con contexto
-            context = cls.prepare_beca_ayuda_context()
-            bert_response = cls._get_qa_response(context, message)
-            
-            cls.conversation_history.append({"role": "assistant", "content": bert_response})
-            cls.response_cache[message] = bert_response
-            return bert_response
+            # 3. Verificar si la pregunta está relacionada con ESPOCH
+            if cls._is_espoch_related(message):
+                # Usar contexto específico de ESPOCH y modelo QA
+                context = cls.prepare_beca_ayuda_context()
+                qa_response = cls._get_qa_response(context, message)
+                
+                cls.conversation_history.append({"role": "assistant", "content": qa_response})
+                cls.response_cache[message] = qa_response
+                return qa_response
+            else:
+                # Para preguntas no relacionadas, dar respuesta educada pero dirigida
+                general_response = cls._get_general_response(message)
+                cls.conversation_history.append({"role": "assistant", "content": general_response})
+                cls.response_cache[message] = general_response
+                return general_response
             
         except Exception as e:
             logging.error(f"Error al generar respuesta: {str(e)}")    
             return "Lo siento, ha ocurrido un error al procesar tu solicitud. Por favor, intenta de nuevo más tarde."
-        
+
     @classmethod
-    def _generate_ai_response(cls, message):
-        """Genera una respuesta usando el modelo de lenguaje."""
-        try:
-            if cls.model is None or cls.tokenizer is None:
-                return None
-                
-            # Preparar el contexto con el historial de conversación (más corto)
-            conversation_context = ""
-            # Usar solo las últimas 2 interacciones para evitar prompts muy largos
-            recent_history = cls.conversation_history[-4:] if len(cls.conversation_history) > 4 else cls.conversation_history
-            
-            for item in recent_history:
-                role = "Usuario: " if item["role"] == "user" else "PochiBot: "
-                conversation_context += role + item["content"] + "\n"
-            
-            # Prompt más corto y directo
-            system_prompt = "PochiBot ayuda a estudiantes de ESPOCH Orellana con becas y servicios universitarios.\n\n"
-            
-            # Crear el prompt completo
-            prompt = system_prompt + conversation_context + "PochiBot: "
-            
-            # Tokenizar el prompt
-            inputs = cls.tokenizer(prompt, return_tensors="pt", max_length=400, truncation=True)
-            
-            # Generar respuesta usando el modelo directamente
-            with torch.no_grad():
-                outputs = cls.model.generate(
-                    inputs["input_ids"],
-                    max_new_tokens=50,
-                    num_return_sequences=1,
-                    temperature=0.8,
-                    top_p=0.92,
-                    do_sample=True,
-                    pad_token_id=cls.tokenizer.eos_token_id,
-                    eos_token_id=cls.tokenizer.eos_token_id,
-                    no_repeat_ngram_size=2
-                )
-            
-            # Decodificar la respuesta
-            generated_text = cls.tokenizer.decode(outputs[0], skip_special_tokens=True)
-            
-            # Extraer solo la respuesta generada
-            response = generated_text.split("PochiBot: ")[-1].strip()
-            
-            # Verificar que la respuesta sea adecuada
-            if len(response) > 10 and "Usuario:" not in response and response != prompt:
-                # Limpiar posibles artefactos
-                response = response.split("\n")[0]
-                # Limitar longitud de respuesta
-                if len(response) > 200:
-                    response = response[:200] + "..."
-                return response
-                
-            return None
-            
-        except Exception as e:
-            logging.error(f"Error al generar respuesta con IA: {str(e)}")
-            return None
-            
+    def _get_general_response(cls, message):
+        """Genera respuesta para preguntas no relacionadas con ESPOCH."""
+        message_lower = message.lower()
+        
+        # Respuestas para saludos generales
+        if any(word in message_lower for word in ['hola', 'buenos días', 'buenas tardes', 'buenas noches', 'saludos']):
+            return "¡Hola! Soy PochiBot, tu asistente virtual de la ESPOCH Sede Orellana. Estoy aquí para ayudarte con información sobre becas, ayudas económicas, carreras y servicios universitarios. ¿En qué puedo asistirte?"
+        
+        # Respuestas para despedidas
+        if any(word in message_lower for word in ['adiós', 'chao', 'hasta luego', 'nos vemos', 'gracias']):
+            return "¡Hasta luego! Fue un placer ayudarte. Si tienes más preguntas sobre la ESPOCH, becas o servicios universitarios, no dudes en contactarme. ¡Que tengas un excelente día!"
+        
+        # Respuestas para preguntas sobre el chatbot
+        if any(word in message_lower for word in ['quién eres', 'qué eres', 'cómo te llamas', 'tu nombre']):
+            return "Soy PochiBot, el asistente virtual de la ESPOCH Sede Orellana. Mi función es ayudar a los estudiantes con información sobre becas, ayudas económicas, carreras disponibles y servicios universitarios. ¿Hay algo específico sobre la ESPOCH en lo que pueda ayudarte?"
+        
+        # Para otras preguntas generales, redirigir amablemente
+        return ("Gracias por tu pregunta. Soy PochiBot, especializado en ayudar con temas relacionados a la ESPOCH Sede Orellana. "
+                "Puedo asistirte con información sobre:\n"
+                "• Becas y ayudas económicas\n"
+                "• Carreras disponibles\n"
+                "• Requisitos y procesos de solicitud\n"
+                "• Servicios universitarios\n"
+                "• Información general de la ESPOCH\n\n"
+                "¿Hay algo específico sobre estos temas en lo que pueda ayudarte?")
+
     @classmethod
     def prepare_beca_ayuda_context(cls):
         """Prepara el contexto de becas y ayudas económicas."""
@@ -266,14 +260,16 @@ class ChatbotService:
             data = cursor.fetchall()
             cursor.close()
 
-            context = "Información sobre becas y ayudas económicas en la ESPOCH:\n"
+            context = "Información sobre becas y ayudas económicas en la ESPOCH Sede Orellana:\n"
             for row in data:
                 context += f"{row['tipo']} - {row['nombre']}: {row['descripcion']}\n"
             
-            # Añadir información general sobre la ESPOCH
-            context += "\nLa ESPOCH (Escuela Superior Politécnica de Chimborazo) es una institución de educación superior pública ubicada en Riobamba, Ecuador. "
-            context += "Fundada en 1972, la ESPOCH se destaca por su excelencia académica y su compromiso con la investigación y el desarrollo tecnológico. "
-            context += "Ofrece una amplia gama de programas de grado y posgrado en áreas como ingeniería, ciencias, administración y tecnología."
+            # Información específica de ESPOCH Sede Orellana
+            context += "\nLa ESPOCH Sede Orellana es una extensión de la Escuela Superior Politécnica de Chimborazo ubicada en la provincia de Orellana, Ecuador. "
+            context += "Ofrece carreras como Ingeniería en Sistemas y Computación, Ingeniería en Biotecnología Ambiental, Administración de Empresas, Enfermería, Agronomía y Turismo. "
+            context += "La sede cuenta con biblioteca, laboratorios especializados, departamento de bienestar estudiantil, servicios médicos y áreas deportivas. "
+            context += "El período académico se divide en dos semestres: septiembre-febrero y marzo-agosto. "
+            context += "Para más información, los estudiantes pueden contactar al Departamento de Bienestar Estudiantil en el edificio administrativo."
 
             return context
         except Exception as e:
@@ -284,53 +280,55 @@ class ChatbotService:
     def _get_qa_response(cls, context, question):
         """Genera una respuesta usando el modelo de Question Answering."""
         try:
-            # Cargar los modelos si aún no se ha cargado el pipeline
             if cls.qa_pipeline is None:
                 cls._load_models()
             
-            # Prevenir el cálculo de gradientes
             with torch.no_grad():
-                max_length = 512  # Limite máximo de tokens por fragmento
+                max_length = 512
                 context_chunks = [context[i:i+max_length] for i in range(0, len(context), max_length)]
                 
                 best_answer = ""
-                best_score = 0  # Empezar con puntaje cero
+                best_score = 0
 
                 # Procesar todos los fragmentos del contexto
                 for chunk in context_chunks:
-                    result = cls.qa_pipeline(question=question, context=chunk, max_length=50, max_answer_length=30)
+                    result = cls.qa_pipeline(question=question, context=chunk, max_length=100, max_answer_length=80)
 
-                    # Comprobar el puntaje y comparar
                     if result['score'] > best_score:
                         best_answer = result['answer']
                         best_score = result['score']
 
-                # Si la puntuación es muy baja, dar respuesta genérica
-                if best_score < 0.5:  
-                    return ("Lo siento, no tengo suficiente información para responder a esa pregunta específica. "
-                            "¿Podrías reformularla o preguntar sobre algo más general relacionado con la ESPOCH, becas o ayudas económicas?."
-                            "Te recomiendo utilizar el botón de Sugerencias")
-
-                return best_answer.strip()
-
-        except (ValueError, KeyError) as e:
-            logging.error(f"Error al generar respuesta con QA: {str(e)}")
-            return "Lo siento, ha ocurrido un error al procesar tu pregunta. Por favor, intenta de nuevo más tarde."
+                # Si la puntuación es alta, usar la respuesta del QA
+                if best_score > 0.6:
+                    return best_answer.strip()
+                
+                # Si la puntuación es media, dar respuesta más específica
+                elif best_score > 0.3:
+                    return f"{best_answer.strip()}. Para información más detallada, te recomiendo contactar al Departamento de Bienestar Estudiantil de la ESPOCH Sede Orellana."
+                
+                # Si la puntuación es baja, respuesta específica
+                else:
+                    return ("No tengo información específica sobre esa consulta en mi base de datos actual. "
+                           "Te recomiendo:\n"
+                           "• Contactar al Departamento de Bienestar Estudiantil\n"
+                           "• Visitar la página web oficial de la ESPOCH\n"
+                           "• Usar el botón de Sugerencias para ver temas disponibles\n"
+                           "• Reformular tu pregunta con términos más específicos sobre becas o servicios universitarios")
 
         except Exception as e:
-            logging.error(f"Error desconocido: {str(e)}")
-            return "Lo siento, ha ocurrido un error inesperado. Intenta nuevamente más tarde."
+            logging.error(f"Error al generar respuesta con QA: {str(e)}")
+            return "Lo siento, ha ocurrido un error al procesar tu pregunta. Por favor, intenta de nuevo más tarde."
 
     @classmethod
     def handle_feedback(cls, feedback, last_response):
         """Maneja el feedback del usuario."""
         try:
             if feedback.lower() in ['bueno', 'útil', 'correcto', 'gracias', 'excelente']:
-                return "¡Gracias por tu feedback positivo! Me alegra haber sido de ayuda."
+                return "¡Gracias por tu feedback positivo! Me alegra haber sido de ayuda. ¿Hay algo más sobre la ESPOCH en lo que pueda asistirte?"
             elif feedback.lower() in ['malo', 'incorrecto', 'no útil', 'error']:
-                return "Lamento que la respuesta no haya sido útil. Estoy aprendiendo constantemente para mejorar."
+                return "Lamento que la respuesta no haya sido útil. Estoy aprendiendo constantemente para mejorar. ¿Podrías reformular tu pregunta o ser más específico sobre lo que necesitas saber?"
             else:
-                return "Gracias por tu feedback. Lo tomaré en cuenta para mejorar mis respuestas."
+                return "Gracias por tu feedback. Lo tomaré en cuenta para mejorar mis respuestas. ¿Hay algo más en lo que pueda ayudarte?"
         except Exception as e:
             logging.error(f"Error al procesar feedback: {str(e)}")
             return "Gracias por tu feedback."
@@ -339,6 +337,7 @@ class ChatbotService:
     def clear_history(cls):
         """Limpia el historial de conversación."""
         cls.conversation_history.clear()
+        cls.response_cache.clear()
         return "Historial de conversación borrado."
 
 if __name__ == "__main__":

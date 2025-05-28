@@ -4,7 +4,7 @@ import logging
 import mysql.connector
 from mysql.connector import Error
 import torch
-from transformers import AutoTokenizer, AutoModelForQuestionAnswering, AutoModelForCausalLM, pipeline
+from transformers import AutoTokenizer, AutoModelForCausalLM, AutoModelForQuestionAnswering, pipeline
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 import nltk
@@ -27,7 +27,7 @@ class ChatbotService:
     tokenizer = None
     model = None
     qa_pipeline = None
-    generation_pipeline = None
+    conversation_pipeline = None
     vectorizer = None
     conversation_history = []
     stop_words = set(stopwords.words('spanish'))
@@ -112,35 +112,31 @@ class ChatbotService:
     def _load_models(cls):
         """Carga los modelos de IA."""
         try:
-            # Cargar modelo de Question Answering como principal
+            # Cargar modelo conversacional
+            logging.info("Cargando modelo conversacional...")
+            conversation_model_name = "microsoft/DialoGPT-medium"
+            cls.tokenizer = AutoTokenizer.from_pretrained(conversation_model_name)
+            cls.model = AutoModelForCausalLM.from_pretrained(conversation_model_name)
+            
+            # Configurar tokens especiales
+            if cls.tokenizer.pad_token is None:
+                cls.tokenizer.pad_token = cls.tokenizer.eos_token
+            
+            logging.info("Modelo conversacional cargado correctamente")
+            
+            # Cargar modelo de Question Answering
             logging.info("Cargando modelo de Question Answering...")
             qa_model_name = "mrm8488/distill-bert-base-spanish-wwm-cased-finetuned-spa-squad2-es"
             cls.qa_pipeline = pipeline(
                 "question-answering",
                 model=qa_model_name,
                 tokenizer=qa_model_name,
-                device=-1  # CPU
+                device=-1
             )
             logging.info("Modelo de Question Answering cargado correctamente")
             
-            # Cargar modelo de generación solo como respaldo
-            try:
-                logging.info("Cargando modelo de generación de texto...")
-                generation_model_name = "PlanTL-GOB-ES/gpt2-base-bne"
-                cls.tokenizer = AutoTokenizer.from_pretrained(generation_model_name)
-                cls.model = AutoModelForCausalLM.from_pretrained(generation_model_name)
-                
-                if cls.tokenizer.pad_token is None:
-                    cls.tokenizer.pad_token = cls.tokenizer.eos_token
-                
-                logging.info("Modelo de generación cargado correctamente")
-            except Exception as gen_error:
-                logging.warning(f"No se pudo cargar el modelo de generación: {gen_error}")
-                cls.model = None
-                cls.tokenizer = None
-            
         except Exception as e:
-            logging.error(f"Error al cargar modelos avanzados: {str(e)}")
+            logging.error(f"Error al cargar modelos: {str(e)}")
             # Fallback al modelo original
             logging.info("Cargando modelo TinyBERT como respaldo...")
             try:
@@ -157,7 +153,6 @@ class ChatbotService:
         """Determina si la pregunta está relacionada con ESPOCH, becas o ayudas."""
         message_lower = message.lower()
         
-        # Palabras clave relacionadas con ESPOCH y becas
         espoch_keywords = [
             'beca', 'becas', 'ayuda económica', 'ayudas económicas', 'financiamiento',
             'espoch', 'universidad', 'carrera', 'carreras', 'estudios', 'estudiante',
@@ -168,12 +163,7 @@ class ChatbotService:
             'servicios', 'académico', 'semestre', 'período académico'
         ]
         
-        # Verificar si contiene palabras clave
-        for keyword in espoch_keywords:
-            if keyword in message_lower:
-                return True
-        
-        return False
+        return any(keyword in message_lower for keyword in espoch_keywords)
 
     @classmethod
     def get_response(cls, message):
@@ -188,7 +178,7 @@ class ChatbotService:
             if len(cls.conversation_history) > 10:
                 cls.conversation_history = cls.conversation_history[-10:]
 
-            # 1. Buscar intent directo en la base de datos (respuestas predefinidas)
+            # 1. Buscar intent directo en la base de datos
             intent_response = cls.match_intent(message)
             if intent_response:
                 cls.conversation_history.append({"role": "assistant", "content": intent_response})
@@ -199,9 +189,9 @@ class ChatbotService:
                 logging.info("Respuesta encontrada en caché")
                 return cls.response_cache[message]
 
-            # 3. Verificar si la pregunta está relacionada con ESPOCH
+            # 3. Verificar si está relacionado con ESPOCH
             if cls._is_espoch_related(message):
-                # Usar contexto específico de ESPOCH y modelo QA
+                # Usar modelo QA con contexto específico
                 context = cls.prepare_beca_ayuda_context()
                 qa_response = cls._get_qa_response(context, message)
                 
@@ -209,34 +199,104 @@ class ChatbotService:
                 cls.response_cache[message] = qa_response
                 return qa_response
             else:
-                # Para preguntas no relacionadas, dar respuesta educada pero dirigida
-                general_response = cls._get_general_response(message)
-                cls.conversation_history.append({"role": "assistant", "content": general_response})
-                cls.response_cache[message] = general_response
-                return general_response
+                # Usar modelo conversacional para respuestas generales
+                conversational_response = cls._get_conversational_response(message)
+                if conversational_response:
+                    cls.conversation_history.append({"role": "assistant", "content": conversational_response})
+                    cls.response_cache[message] = conversational_response
+                    return conversational_response
+                else:
+                    # Fallback a respuesta dirigida
+                    general_response = cls._get_general_response(message)
+                    cls.conversation_history.append({"role": "assistant", "content": general_response})
+                    return general_response
             
         except Exception as e:
             logging.error(f"Error al generar respuesta: {str(e)}")    
             return "Lo siento, ha ocurrido un error al procesar tu solicitud. Por favor, intenta de nuevo más tarde."
 
     @classmethod
+    def _get_conversational_response(cls, message):
+        """Genera respuesta usando el modelo conversacional."""
+        try:
+            if cls.model is None or cls.tokenizer is None:
+                return None
+            
+            # Preparar el historial de conversación para DialoGPT
+            chat_history_ids = None
+            
+            # Codificar el mensaje del usuario
+            new_user_input_ids = cls.tokenizer.encode(
+                message + cls.tokenizer.eos_token, 
+                return_tensors='pt'
+            )
+            
+            # Si hay historial, concatenar
+            if len(cls.conversation_history) > 2:
+                # Tomar las últimas 3 interacciones
+                recent_history = cls.conversation_history[-6:]
+                history_text = ""
+                for item in recent_history:
+                    if item["role"] == "user":
+                        history_text += item["content"] + cls.tokenizer.eos_token
+                    else:
+                        history_text += item["content"] + cls.tokenizer.eos_token
+                
+                chat_history_ids = cls.tokenizer.encode(
+                    history_text, 
+                    return_tensors='pt'
+                )
+                
+                # Concatenar con el nuevo input
+                bot_input_ids = torch.cat([chat_history_ids, new_user_input_ids], dim=-1)
+            else:
+                bot_input_ids = new_user_input_ids
+            
+            # Generar respuesta
+            with torch.no_grad():
+                chat_history_ids = cls.model.generate(
+                    bot_input_ids,
+                    max_new_tokens=50,
+                    num_beams=3,
+                    temperature=0.7,
+                    do_sample=True,
+                    pad_token_id=cls.tokenizer.eos_token_id,
+                    no_repeat_ngram_size=2
+                )
+            
+            # Decodificar solo la parte nueva (respuesta del bot)
+            response = cls.tokenizer.decode(
+                chat_history_ids[:, bot_input_ids.shape[-1]:][0], 
+                skip_special_tokens=True
+            )
+            
+            # Validar respuesta
+            if len(response.strip()) > 5 and len(response.strip()) < 200:
+                # Añadir contexto de ESPOCH si la respuesta es muy genérica
+                if len(response.strip()) < 30:
+                    response += " ¿Hay algo específico sobre la ESPOCH en lo que pueda ayudarte?"
+                return response.strip()
+            
+            return None
+            
+        except Exception as e:
+            logging.error(f"Error en respuesta conversacional: {str(e)}")
+            return None
+
+    @classmethod
     def _get_general_response(cls, message):
         """Genera respuesta para preguntas no relacionadas con ESPOCH."""
         message_lower = message.lower()
         
-        # Respuestas para saludos generales
         if any(word in message_lower for word in ['hola', 'buenos días', 'buenas tardes', 'buenas noches', 'saludos']):
             return "¡Hola! Soy PochiBot, tu asistente virtual de la ESPOCH Sede Orellana. Estoy aquí para ayudarte con información sobre becas, ayudas económicas, carreras y servicios universitarios. ¿En qué puedo asistirte?"
         
-        # Respuestas para despedidas
         if any(word in message_lower for word in ['adiós', 'chao', 'hasta luego', 'nos vemos', 'gracias']):
             return "¡Hasta luego! Fue un placer ayudarte. Si tienes más preguntas sobre la ESPOCH, becas o servicios universitarios, no dudes en contactarme. ¡Que tengas un excelente día!"
         
-        # Respuestas para preguntas sobre el chatbot
         if any(word in message_lower for word in ['quién eres', 'qué eres', 'cómo te llamas', 'tu nombre']):
             return "Soy PochiBot, el asistente virtual de la ESPOCH Sede Orellana. Mi función es ayudar a los estudiantes con información sobre becas, ayudas económicas, carreras disponibles y servicios universitarios. ¿Hay algo específico sobre la ESPOCH en lo que pueda ayudarte?"
         
-        # Para otras preguntas generales, redirigir amablemente
         return ("Gracias por tu pregunta. Soy PochiBot, especializado en ayudar con temas relacionados a la ESPOCH Sede Orellana. "
                 "Puedo asistirte con información sobre:\n"
                 "• Becas y ayudas económicas\n"
@@ -264,7 +324,6 @@ class ChatbotService:
             for row in data:
                 context += f"{row['tipo']} - {row['nombre']}: {row['descripcion']}\n"
             
-            # Información específica de ESPOCH Sede Orellana
             context += "\nLa ESPOCH Sede Orellana es una extensión de la Escuela Superior Politécnica de Chimborazo ubicada en la provincia de Orellana, Ecuador. "
             context += "Ofrece carreras como Ingeniería en Sistemas y Computación, Ingeniería en Biotecnología Ambiental, Administración de Empresas, Enfermería, Agronomía y Turismo. "
             context += "La sede cuenta con biblioteca, laboratorios especializados, departamento de bienestar estudiantil, servicios médicos y áreas deportivas. "
@@ -290,7 +349,6 @@ class ChatbotService:
                 best_answer = ""
                 best_score = 0
 
-                # Procesar todos los fragmentos del contexto
                 for chunk in context_chunks:
                     result = cls.qa_pipeline(question=question, context=chunk, max_length=100, max_answer_length=80)
 
@@ -298,15 +356,10 @@ class ChatbotService:
                         best_answer = result['answer']
                         best_score = result['score']
 
-                # Si la puntuación es alta, usar la respuesta del QA
                 if best_score > 0.6:
                     return best_answer.strip()
-                
-                # Si la puntuación es media, dar respuesta más específica
                 elif best_score > 0.3:
                     return f"{best_answer.strip()}. Para información más detallada, te recomiendo contactar al Departamento de Bienestar Estudiantil de la ESPOCH Sede Orellana."
-                
-                # Si la puntuación es baja, respuesta específica
                 else:
                     return ("No tengo información específica sobre esa consulta en mi base de datos actual. "
                            "Te recomiendo:\n"

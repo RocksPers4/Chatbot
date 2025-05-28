@@ -122,17 +122,7 @@ class ChatbotService:
             if cls.tokenizer.pad_token is None:
                 cls.tokenizer.pad_token = cls.tokenizer.eos_token
             
-            cls.generation_pipeline = pipeline(
-                "text-generation",
-                model=cls.model,
-                tokenizer=cls.tokenizer,
-                device=-1,  # CPU
-                max_new_tokens=50,  # Cambiar de max_length a max_new_tokens
-                do_sample=True,
-                temperature=0.7,
-                pad_token_id=cls.tokenizer.eos_token_id,
-                truncation=True  # Añadir truncation
-            )
+            # No usar pipeline, usar el modelo directamente para mejor control
             logging.info("Modelo de generación cargado correctamente")
             
             # Cargar modelo de Question Answering como respaldo
@@ -206,45 +196,54 @@ class ChatbotService:
     def _generate_ai_response(cls, message):
         """Genera una respuesta usando el modelo de lenguaje."""
         try:
-            if cls.generation_pipeline is None:
+            if cls.model is None or cls.tokenizer is None:
                 return None
                 
-            # Preparar el contexto con el historial de conversación
+            # Preparar el contexto con el historial de conversación (más corto)
             conversation_context = ""
-            # Usar las últimas 3 interacciones para contexto
-            recent_history = cls.conversation_history[-6:] if len(cls.conversation_history) > 6 else cls.conversation_history
+            # Usar solo las últimas 2 interacciones para evitar prompts muy largos
+            recent_history = cls.conversation_history[-4:] if len(cls.conversation_history) > 4 else cls.conversation_history
             
             for item in recent_history:
                 role = "Usuario: " if item["role"] == "user" else "PochiBot: "
                 conversation_context += role + item["content"] + "\n"
             
-            # Añadir información sobre el rol del chatbot
-            system_prompt = "PochiBot es un asistente virtual de la ESPOCH Sede Orellana que ayuda a estudiantes con información sobre becas, ayudas económicas, carreras y servicios universitarios.\n\n"
+            # Prompt más corto y directo
+            system_prompt = "PochiBot ayuda a estudiantes de ESPOCH Orellana con becas y servicios universitarios.\n\n"
             
             # Crear el prompt completo
             prompt = system_prompt + conversation_context + "PochiBot: "
             
-            # Generar respuesta
-            result = cls.generation_pipeline(
-                prompt,
-                max_new_tokens=50,  # Cambiar de max_length a max_new_tokens
-                num_return_sequences=1,
-                temperature=0.8,
-                top_p=0.92,
-                do_sample=True,
-                pad_token_id=cls.tokenizer.eos_token_id,
-                eos_token_id=cls.tokenizer.eos_token_id,
-                truncation=True  # Añadir truncation para manejar inputs largos
-            )
+            # Tokenizar el prompt
+            inputs = cls.tokenizer(prompt, return_tensors="pt", max_length=400, truncation=True)
+            
+            # Generar respuesta usando el modelo directamente
+            with torch.no_grad():
+                outputs = cls.model.generate(
+                    inputs["input_ids"],
+                    max_new_tokens=50,
+                    num_return_sequences=1,
+                    temperature=0.8,
+                    top_p=0.92,
+                    do_sample=True,
+                    pad_token_id=cls.tokenizer.eos_token_id,
+                    eos_token_id=cls.tokenizer.eos_token_id,
+                    no_repeat_ngram_size=2
+                )
+            
+            # Decodificar la respuesta
+            generated_text = cls.tokenizer.decode(outputs[0], skip_special_tokens=True)
             
             # Extraer solo la respuesta generada
-            generated_text = result[0]['generated_text']
             response = generated_text.split("PochiBot: ")[-1].strip()
             
             # Verificar que la respuesta sea adecuada
-            if len(response) > 10 and "Usuario:" not in response:
+            if len(response) > 10 and "Usuario:" not in response and response != prompt:
                 # Limpiar posibles artefactos
                 response = response.split("\n")[0]
+                # Limitar longitud de respuesta
+                if len(response) > 200:
+                    response = response[:200] + "..."
                 return response
                 
             return None

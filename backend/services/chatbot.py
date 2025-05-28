@@ -127,10 +127,11 @@ class ChatbotService:
                 model=cls.model,
                 tokenizer=cls.tokenizer,
                 device=-1,  # CPU
-                max_length=200,
+                max_new_tokens=50,  # Cambiar de max_length a max_new_tokens
                 do_sample=True,
                 temperature=0.7,
-                pad_token_id=cls.tokenizer.eos_token_id
+                pad_token_id=cls.tokenizer.eos_token_id,
+                truncation=True  # Añadir truncation
             )
             logging.info("Modelo de generación cargado correctamente")
             
@@ -226,12 +227,14 @@ class ChatbotService:
             # Generar respuesta
             result = cls.generation_pipeline(
                 prompt,
-                max_length=len(prompt.split()) + 50,  # Permitir respuestas más largas
+                max_new_tokens=50,  # Cambiar de max_length a max_new_tokens
                 num_return_sequences=1,
-                temperature=0.8,  # Aumentar creatividad
+                temperature=0.8,
                 top_p=0.92,
                 do_sample=True,
-                pad_token_id=cls.tokenizer.eos_token_id
+                pad_token_id=cls.tokenizer.eos_token_id,
+                eos_token_id=cls.tokenizer.eos_token_id,
+                truncation=True  # Añadir truncation para manejar inputs largos
             )
             
             # Extraer solo la respuesta generada

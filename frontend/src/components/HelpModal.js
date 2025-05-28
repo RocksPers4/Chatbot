@@ -10,6 +10,7 @@ const HelpModal = ({ isOpen, onClose }) => {
         <div>
         <a h2 href="https://becas.espoch.edu.ec/becario" className="text-blue-500 hover:underline">Llenar mi Ficha</a>
         </div>
+        <p>¿Por qué debo actualizar mi ficha?: <a href='https://www.facebook.com/share/v/15QhCzPBHn/' className="text-blue-500 hover:underline">Click aquí</a></p>
         <div>
         <a h2 href="https://forms.office.com/r/FrghAuRVbC" className="text-blue-500 hover:underline">Cuestionario</a>
         </div>

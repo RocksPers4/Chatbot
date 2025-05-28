@@ -110,17 +110,28 @@ class ChatbotService:
 
     @classmethod
     def _load_models(cls):
-        """Carga los modelos de IA."""
+        """Carga los modelos de IA con configuración correcta."""
         try:
-            # Cargar modelo conversacional
+            # Cargar modelo conversacional con configuración correcta
             logging.info("Cargando modelo conversacional...")
             conversation_model_name = "microsoft/DialoGPT-medium"
+            
+            # Cargar tokenizer y configurar padding
             cls.tokenizer = AutoTokenizer.from_pretrained(conversation_model_name)
-            cls.model = AutoModelForCausalLM.from_pretrained(conversation_model_name)
+            
+            # SOLUCIÓN: Configurar padding a la izquierda para modelos decoder-only
+            cls.tokenizer.padding_side = 'left'
             
             # Configurar tokens especiales
             if cls.tokenizer.pad_token is None:
                 cls.tokenizer.pad_token = cls.tokenizer.eos_token
+            
+            # Cargar modelo
+            cls.model = AutoModelForCausalLM.from_pretrained(
+                conversation_model_name,
+                torch_dtype=torch.float32,  # Usar float32 para mejor compatibilidad
+                device_map="auto" if torch.cuda.is_available() else None
+            )
             
             logging.info("Modelo conversacional cargado correctamente")
             
@@ -137,16 +148,19 @@ class ChatbotService:
             
         except Exception as e:
             logging.error(f"Error al cargar modelos: {str(e)}")
-            # Fallback al modelo original
-            logging.info("Cargando modelo TinyBERT como respaldo...")
+            # Fallback más simple
+            logging.info("Cargando modelo de respaldo...")
             try:
-                cls.tokenizer = AutoTokenizer.from_pretrained("prajjwal1/bert-tiny")
-                cls.model = AutoModelForQuestionAnswering.from_pretrained("prajjwal1/bert-tiny")
-                cls.qa_pipeline = pipeline("question-answering", model=cls.model, tokenizer=cls.tokenizer)
-                logging.info("Modelo TinyBERT cargado como respaldo")
+                # Usar un modelo más simple como respaldo
+                cls.tokenizer = AutoTokenizer.from_pretrained("distilgpt2")
+                cls.tokenizer.padding_side = 'left'
+                cls.tokenizer.pad_token = cls.tokenizer.eos_token
+                cls.model = AutoModelForCausalLM.from_pretrained("distilgpt2")
+                logging.info("Modelo de respaldo cargado correctamente")
             except Exception as fallback_error:
                 logging.error(f"Error al cargar modelo de respaldo: {str(fallback_error)}")
-                cls.qa_pipeline = None
+                cls.model = None
+                cls.tokenizer = None
 
     @classmethod
     def _is_espoch_related(cls, message):
@@ -217,65 +231,67 @@ class ChatbotService:
 
     @classmethod
     def _get_conversational_response(cls, message):
-        """Genera respuesta usando el modelo conversacional."""
+        """Genera respuesta usando el modelo conversacional con padding correcto."""
         try:
             if cls.model is None or cls.tokenizer is None:
                 return None
             
-            # Preparar el historial de conversación para DialoGPT
-            chat_history_ids = None
+            # Preparar el prompt con contexto de ESPOCH
+            espoch_context = "Eres PochiBot, asistente de la ESPOCH Sede Orellana. Ayudas con becas y servicios universitarios."
             
-            # Codificar el mensaje del usuario
-            new_user_input_ids = cls.tokenizer.encode(
-                message + cls.tokenizer.eos_token, 
-                return_tensors='pt'
-            )
-            
-            # Si hay historial, concatenar
+            # Construir el prompt
             if len(cls.conversation_history) > 2:
-                # Tomar las últimas 3 interacciones
-                recent_history = cls.conversation_history[-6:]
-                history_text = ""
+                # Incluir historial reciente
+                recent_history = cls.conversation_history[-4:]
+                conversation_text = espoch_context + "\n"
                 for item in recent_history:
                     if item["role"] == "user":
-                        history_text += item["content"] + cls.tokenizer.eos_token
+                        conversation_text += f"Usuario: {item['content']}\n"
                     else:
-                        history_text += item["content"] + cls.tokenizer.eos_token
-                
-                chat_history_ids = cls.tokenizer.encode(
-                    history_text, 
-                    return_tensors='pt'
-                )
-                
-                # Concatenar con el nuevo input
-                bot_input_ids = torch.cat([chat_history_ids, new_user_input_ids], dim=-1)
+                        conversation_text += f"PochiBot: {item['content']}\n"
+                conversation_text += f"Usuario: {message}\nPochiBot:"
             else:
-                bot_input_ids = new_user_input_ids
+                conversation_text = f"{espoch_context}\nUsuario: {message}\nPochiBot:"
+            
+            # Codificar con padding correcto
+            inputs = cls.tokenizer.encode_plus(
+                conversation_text,
+                return_tensors='pt',
+                padding=True,
+                truncation=True,
+                max_length=512,
+                add_special_tokens=True
+            )
             
             # Generar respuesta
             with torch.no_grad():
-                chat_history_ids = cls.model.generate(
-                    bot_input_ids,
+                outputs = cls.model.generate(
+                    inputs['input_ids'],
+                    attention_mask=inputs['attention_mask'],
                     max_new_tokens=50,
                     num_beams=3,
                     temperature=0.7,
                     do_sample=True,
-                    pad_token_id=cls.tokenizer.eos_token_id,
-                    no_repeat_ngram_size=2
+                    pad_token_id=cls.tokenizer.pad_token_id,
+                    eos_token_id=cls.tokenizer.eos_token_id,
+                    no_repeat_ngram_size=2,
+                    early_stopping=True
                 )
             
-            # Decodificar solo la parte nueva (respuesta del bot)
+            # Decodificar solo la respuesta nueva
             response = cls.tokenizer.decode(
-                chat_history_ids[:, bot_input_ids.shape[-1]:][0], 
+                outputs[0][inputs['input_ids'].shape[1]:], 
                 skip_special_tokens=True
-            )
+            ).strip()
             
-            # Validar respuesta
-            if len(response.strip()) > 5 and len(response.strip()) < 200:
-                # Añadir contexto de ESPOCH si la respuesta es muy genérica
-                if len(response.strip()) < 30:
-                    response += " ¿Hay algo específico sobre la ESPOCH en lo que pueda ayudarte?"
-                return response.strip()
+            # Validar y limpiar respuesta
+            if len(response) > 5 and len(response) < 200:
+                # Limpiar respuesta
+                response = response.split('\n')[0]  # Tomar solo la primera línea
+                response = response.replace('Usuario:', '').replace('PochiBot:', '').strip()
+                
+                if len(response) > 10:
+                    return response
             
             return None
             

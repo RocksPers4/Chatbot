@@ -4,7 +4,7 @@ import logging
 import mysql.connector
 from mysql.connector import Error
 import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM, AutoModelForQuestionAnswering, pipeline
+from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, AutoModelForQuestionAnswering, pipeline
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 import nltk
@@ -27,7 +27,6 @@ class ChatbotService:
     tokenizer = None
     model = None
     qa_pipeline = None
-    conversation_pipeline = None
     vectorizer = None
     conversation_history = []
     stop_words = set(stopwords.words('spanish'))
@@ -110,32 +109,16 @@ class ChatbotService:
 
     @classmethod
     def _load_models(cls):
-        """Carga los modelos de IA con configuración correcta."""
+        """Carga los modelos de IA."""
         try:
-            # Cargar modelo conversacional con configuración correcta
-            logging.info("Cargando modelo conversacional...")
-            conversation_model_name = "microsoft/DialoGPT-medium"
+            # Cargar modelo GODEL como principal para mejor conversación
+            logging.info("Cargando modelo GODEL para PochiBot...")
+            godel_model_name = "microsoft/GODEL-v1_1-base-seq2seq"
+            cls.tokenizer = AutoTokenizer.from_pretrained(godel_model_name)
+            cls.model = AutoModelForSeq2SeqLM.from_pretrained(godel_model_name)
+            logging.info("Modelo GODEL cargado correctamente")
             
-            # Cargar tokenizer y configurar padding
-            cls.tokenizer = AutoTokenizer.from_pretrained(conversation_model_name)
-            
-            # SOLUCIÓN: Configurar padding a la izquierda para modelos decoder-only
-            cls.tokenizer.padding_side = 'left'
-            
-            # Configurar tokens especiales
-            if cls.tokenizer.pad_token is None:
-                cls.tokenizer.pad_token = cls.tokenizer.eos_token
-            
-            # Cargar modelo
-            cls.model = AutoModelForCausalLM.from_pretrained(
-                conversation_model_name,
-                torch_dtype=torch.float32,  # Usar float32 para mejor compatibilidad
-                device_map="auto" if torch.cuda.is_available() else None
-            )
-            
-            logging.info("Modelo conversacional cargado correctamente")
-            
-            # Cargar modelo de Question Answering
+            # Cargar modelo de Question Answering como respaldo
             logging.info("Cargando modelo de Question Answering...")
             qa_model_name = "mrm8488/distill-bert-base-spanish-wwm-cased-finetuned-spa-squad2-es"
             cls.qa_pipeline = pipeline(
@@ -147,26 +130,24 @@ class ChatbotService:
             logging.info("Modelo de Question Answering cargado correctamente")
             
         except Exception as e:
-            logging.error(f"Error al cargar modelos: {str(e)}")
-            # Fallback más simple
-            logging.info("Cargando modelo de respaldo...")
+            logging.error(f"Error al cargar modelos avanzados: {str(e)}")
+            # Fallback al modelo original
+            logging.info("Cargando modelo TinyBERT como respaldo...")
             try:
-                # Usar un modelo más simple como respaldo
-                cls.tokenizer = AutoTokenizer.from_pretrained("distilgpt2")
-                cls.tokenizer.padding_side = 'left'
-                cls.tokenizer.pad_token = cls.tokenizer.eos_token
-                cls.model = AutoModelForCausalLM.from_pretrained("distilgpt2")
-                logging.info("Modelo de respaldo cargado correctamente")
+                cls.tokenizer = AutoTokenizer.from_pretrained("prajjwal1/bert-tiny")
+                cls.model = AutoModelForQuestionAnswering.from_pretrained("prajjwal1/bert-tiny")
+                cls.qa_pipeline = pipeline("question-answering", model=cls.model, tokenizer=cls.tokenizer)
+                logging.info("Modelo TinyBERT cargado como respaldo")
             except Exception as fallback_error:
                 logging.error(f"Error al cargar modelo de respaldo: {str(fallback_error)}")
-                cls.model = None
-                cls.tokenizer = None
+                cls.qa_pipeline = None
 
     @classmethod
     def _is_espoch_related(cls, message):
         """Determina si la pregunta está relacionada con ESPOCH, becas o ayudas."""
         message_lower = message.lower()
         
+        # Palabras clave relacionadas con ESPOCH y becas
         espoch_keywords = [
             'beca', 'becas', 'ayuda económica', 'ayudas económicas', 'financiamiento',
             'espoch', 'universidad', 'carrera', 'carreras', 'estudios', 'estudiante',
@@ -177,7 +158,12 @@ class ChatbotService:
             'servicios', 'académico', 'semestre', 'período académico'
         ]
         
-        return any(keyword in message_lower for keyword in espoch_keywords)
+        # Verificar si contiene palabras clave
+        for keyword in espoch_keywords:
+            if keyword in message_lower:
+                return True
+        
+        return False
 
     @classmethod
     def get_response(cls, message):
@@ -192,7 +178,7 @@ class ChatbotService:
             if len(cls.conversation_history) > 10:
                 cls.conversation_history = cls.conversation_history[-10:]
 
-            # 1. Buscar intent directo en la base de datos
+            # 1. Buscar intent directo en la base de datos (respuestas predefinidas)
             intent_response = cls.match_intent(message)
             if intent_response:
                 cls.conversation_history.append({"role": "assistant", "content": intent_response})
@@ -203,64 +189,65 @@ class ChatbotService:
                 logging.info("Respuesta encontrada en caché")
                 return cls.response_cache[message]
 
-            # 3. Verificar si está relacionado con ESPOCH
+            # 3. Verificar si la pregunta está relacionada con ESPOCH
             if cls._is_espoch_related(message):
-                # Usar modelo QA con contexto específico
+                # Usar contexto específico de ESPOCH y modelo GODEL
                 context = cls.prepare_beca_ayuda_context()
-                qa_response = cls._get_qa_response(context, message)
+                godel_response = cls._get_godel_response(context, message)
                 
-                cls.conversation_history.append({"role": "assistant", "content": qa_response})
-                cls.response_cache[message] = qa_response
-                return qa_response
+                cls.conversation_history.append({"role": "assistant", "content": godel_response})
+                cls.response_cache[message] = godel_response
+                return godel_response
             else:
-                # Usar modelo conversacional para respuestas generales
-                conversational_response = cls._get_conversational_response(message)
-                if conversational_response:
-                    cls.conversation_history.append({"role": "assistant", "content": conversational_response})
-                    cls.response_cache[message] = conversational_response
-                    return conversational_response
-                else:
-                    # Fallback a respuesta dirigida
-                    general_response = cls._get_general_response(message)
-                    cls.conversation_history.append({"role": "assistant", "content": general_response})
-                    return general_response
+                # Para preguntas no relacionadas, dar respuesta educada pero dirigida
+                general_response = cls._get_general_response(message)
+                cls.conversation_history.append({"role": "assistant", "content": general_response})
+                cls.response_cache[message] = general_response
+                return general_response
             
         except Exception as e:
             logging.error(f"Error al generar respuesta: {str(e)}")    
             return "Lo siento, ha ocurrido un error al procesar tu solicitud. Por favor, intenta de nuevo más tarde."
 
     @classmethod
-    def _get_conversational_response(cls, message):
-        """Genera respuesta usando el modelo conversacional con padding correcto."""
+    def _get_godel_response(cls, context, question):
+        """Genera una respuesta usando el modelo GODEL con contexto de ESPOCH."""
         try:
             if cls.model is None or cls.tokenizer is None:
-                return None
+                # Fallback al QA si GODEL no está disponible
+                return cls._get_qa_response(context, question)
             
-            # Preparar el prompt con contexto de ESPOCH
-            espoch_context = "Eres PochiBot, asistente de la ESPOCH Sede Orellana. Ayudas con becas y servicios universitarios."
+            # Definir el rol y contexto específico de PochiBot
+            instruction = ("Eres PochiBot, el asistente virtual amigable de la ESPOCH Sede Orellana. "
+                          "Tu misión es ayudar a los estudiantes con información sobre becas, ayudas económicas, "
+                          "carreras, servicios universitarios y trámites académicos. "
+                          "Responde de manera clara, amigable y útil. "
+                          "Organiza tus respuestas con viñetas (•) cuando sea apropiado. "
+                          "Estructura tus respuestas con una introducción, puntos principales y una conclusión. "
+                          "Sé conciso pero informativo.")
             
-            # Construir el prompt
+            knowledge = context
+            
+            # Construir historial de diálogo
+            dialog_history = ""
             if len(cls.conversation_history) > 2:
-                # Incluir historial reciente
                 recent_history = cls.conversation_history[-4:]
-                conversation_text = espoch_context + "\n"
                 for item in recent_history:
                     if item["role"] == "user":
-                        conversation_text += f"Usuario: {item['content']}\n"
+                        dialog_history += f"Estudiante: {item['content']} "
                     else:
-                        conversation_text += f"PochiBot: {item['content']}\n"
-                conversation_text += f"Usuario: {message}\nPochiBot:"
-            else:
-                conversation_text = f"{espoch_context}\nUsuario: {message}\nPochiBot:"
+                        dialog_history += f"PochiBot: {item['content']} "
             
-            # Codificar con padding correcto
+            # Formato específico para GODEL
+            prompt = f"Instruction: {instruction} Knowledge: {knowledge} Dialogue: {dialog_history}Estudiante: {question} PochiBot:"
+            
+            # Tokenizar con límite de longitud
             inputs = cls.tokenizer.encode_plus(
-                conversation_text,
+                prompt,
                 return_tensors='pt',
                 padding=True,
                 truncation=True,
-                max_length=512,
-                add_special_tokens=True
+                max_length=512
             )
             
             # Generar respuesta
@@ -268,59 +255,151 @@ class ChatbotService:
                 outputs = cls.model.generate(
                     inputs['input_ids'],
                     attention_mask=inputs['attention_mask'],
-                    max_new_tokens=50,
-                    num_beams=3,
+                    max_new_tokens=100,
+                    num_beams=4,
                     temperature=0.7,
                     do_sample=True,
-                    pad_token_id=cls.tokenizer.pad_token_id,
-                    eos_token_id=cls.tokenizer.eos_token_id,
-                    no_repeat_ngram_size=2,
-                    early_stopping=True
+                    no_repeat_ngram_size=3,
+                    early_stopping=True,
+                    pad_token_id=cls.tokenizer.pad_token_id if cls.tokenizer.pad_token_id else cls.tokenizer.eos_token_id
                 )
             
-            # Decodificar solo la respuesta nueva
-            response = cls.tokenizer.decode(
-                outputs[0][inputs['input_ids'].shape[1]:], 
-                skip_special_tokens=True
-            ).strip()
+            # Decodificar respuesta
+            response = cls.tokenizer.decode(outputs[0], skip_special_tokens=True)
             
-            # Validar y limpiar respuesta
-            if len(response) > 5 and len(response) < 200:
-                # Limpiar respuesta
-                response = response.split('\n')[0]  # Tomar solo la primera línea
-                response = response.replace('Usuario:', '').replace('PochiBot:', '').strip()
+            # Extraer solo la respuesta de PochiBot
+            if "PochiBot:" in response:
+                response = response.split("PochiBot:")[-1].strip()
+            
+            # Limpiar y validar respuesta
+            response = cls._clean_response(response, question)
+            
+            if response and len(response) > 15 and len(response) < 300:
+                return response
+            else:
+                # Fallback al modelo QA si la respuesta no es buena
+                return cls._get_qa_response(context, question)
                 
-                if len(response) > 10:
-                    return response
-            
-            return None
-            
         except Exception as e:
-            logging.error(f"Error en respuesta conversacional: {str(e)}")
+            logging.error(f"Error al generar respuesta con GODEL: {str(e)}")
+            # Fallback al modelo QA
+            return cls._get_qa_response(context, question)
+
+    @classmethod
+    def _clean_response(cls, response, original_question):
+        """Limpia y mejora la respuesta generada para que sea más organizada."""
+        if not response:
             return None
+        
+        # Limpiar respuesta
+        response = response.strip()
+        
+        # Remover fragmentos del prompt que puedan aparecer
+        unwanted_phrases = [
+            "Instruction:", "Knowledge:", "Dialogue:", "Estudiante:", "PochiBot:",
+            "Eres PochiBot", "asistente virtual", "ESPOCH Sede Orellana"
+        ]
+        
+        for phrase in unwanted_phrases:
+            response = response.replace(phrase, "").strip()
+        
+        # Limpiar caracteres extraños
+        response = response.replace("  ", " ").strip()
+        
+        # Organizar la respuesta en formato estructurado
+        # Detectar si hay puntos o elementos que puedan ser listados
+        sentences = response.split('.')
+        if len(sentences) > 2:
+            # Si hay varias oraciones, intentar estructurarlas como lista
+            structured_response = ""
+            
+            # Primera oración como introducción
+            structured_response += sentences[0].strip() + ".\n\n"
+            
+            # Resto como puntos
+            points = []
+            for sentence in sentences[1:-1]:
+                sentence = sentence.strip()
+                if sentence and len(sentence) > 10:
+                    points.append(f"• {sentence.capitalize()}.")
+            
+            if points:
+                structured_response += "\n".join(points)
+                
+                # Añadir conclusión si hay una última oración significativa
+                if len(sentences[-1].strip()) > 10:
+                    structured_response += f"\n\n{sentences[-1].strip().capitalize()}."
+                
+                # Añadir pregunta de seguimiento
+                structured_response += "\n\n¿Hay algo más en lo que pueda ayudarte?"
+                
+                return structured_response
+        
+        # Si no se pudo estructurar, mejorar formato básico
+        if "," in response and len(response) > 100:
+            # Intentar convertir comas en puntos de lista
+            parts = response.split(",")
+            if len(parts) > 2:
+                structured_response = parts[0].strip() + ":\n\n"
+                for part in parts[1:]:
+                    part = part.strip()
+                    if part and len(part) > 5:
+                        structured_response += f"• {part.capitalize()}\n"
+                return structured_response
+        
+        # Si la respuesta es muy corta, añadir contexto
+        if len(response) < 30:
+            response += "\n\n¿Hay algo más específico sobre la ESPOCH en lo que pueda ayudarte?"
+        
+        # Verificar que no sea repetición de la pregunta
+        if original_question.lower() in response.lower():
+            return None
+        
+        return response
 
     @classmethod
     def _get_general_response(cls, message):
-        """Genera respuesta para preguntas no relacionadas con ESPOCH."""
+        """Genera respuesta estructurada para preguntas no relacionadas con ESPOCH."""
         message_lower = message.lower()
         
+        # Respuestas para saludos generales
         if any(word in message_lower for word in ['hola', 'buenos días', 'buenas tardes', 'buenas noches', 'saludos']):
-            return "¡Hola! Soy PochiBot, tu asistente virtual de la ESPOCH Sede Orellana. Estoy aquí para ayudarte con información sobre becas, ayudas económicas, carreras y servicios universitarios. ¿En qué puedo asistirte?"
+            return ("¡Hola! Soy PochiBot, tu asistente virtual de la ESPOCH Sede Orellana.\n\n"
+                   "Estoy aquí para ayudarte con:\n"
+                   "• Información sobre becas y ayudas económicas\n"
+                   "• Detalles sobre nuestras 5 carreras\n"
+                   "• Procesos y trámites académicos\n"
+                   "• Servicios universitarios disponibles\n\n"
+                   "¿En qué tema específico puedo asistirte hoy?")
         
+        # Respuestas para despedidas
         if any(word in message_lower for word in ['adiós', 'chao', 'hasta luego', 'nos vemos', 'gracias']):
-            return "¡Hasta luego! Fue un placer ayudarte. Si tienes más preguntas sobre la ESPOCH, becas o servicios universitarios, no dudes en contactarme. ¡Que tengas un excelente día!"
+            return ("¡Hasta luego! Fue un placer ayudarte.\n\n"
+                   "Recuerda que estoy disponible para:\n"
+                   "• Resolver tus dudas sobre la ESPOCH\n"
+                   "• Brindarte información actualizada\n"
+                   "• Orientarte en tus trámites académicos\n\n"
+                   "¡Que tengas un excelente día!")
         
+        # Respuestas para preguntas sobre el chatbot
         if any(word in message_lower for word in ['quién eres', 'qué eres', 'cómo te llamas', 'tu nombre']):
-            return "Soy PochiBot, el asistente virtual de la ESPOCH Sede Orellana. Mi función es ayudar a los estudiantes con información sobre becas, ayudas económicas, carreras disponibles y servicios universitarios. ¿Hay algo específico sobre la ESPOCH en lo que pueda ayudarte?"
+            return ("Soy PochiBot, el asistente virtual oficial de la ESPOCH Sede Orellana.\n\n"
+                   "Mi función es:\n"
+                   "• Ayudar a estudiantes con información precisa\n"
+                   "• Orientar sobre becas y ayudas económicas\n"
+                   "• Brindar detalles sobre nuestras carreras\n"
+                   "• Facilitar información sobre servicios universitarios\n\n"
+                   "¿Hay algo específico sobre la ESPOCH en lo que pueda ayudarte?")
         
-        return ("Gracias por tu pregunta. Soy PochiBot, especializado en ayudar con temas relacionados a la ESPOCH Sede Orellana. "
+        # Para otras preguntas generales, redirigir amablemente
+        return ("Gracias por tu pregunta. Soy PochiBot, especializado en temas de la ESPOCH Sede Orellana.\n\n"
                 "Puedo asistirte con información sobre:\n"
                 "• Becas y ayudas económicas\n"
-                "• Carreras disponibles\n"
+                "• Nuestras 5 carreras: Agronomía, Turismo, Ingeniería Ambiental, Zootecnia y Tecnologías de la Información\n"
                 "• Requisitos y procesos de solicitud\n"
                 "• Servicios universitarios\n"
-                "• Información general de la ESPOCH\n\n"
-                "¿Hay algo específico sobre estos temas en lo que pueda ayudarte?")
+                "• Información general del campus\n\n"
+                "¿En qué área específica necesitas ayuda?")
 
     @classmethod
     def prepare_beca_ayuda_context(cls):
@@ -336,15 +415,42 @@ class ChatbotService:
             data = cursor.fetchall()
             cursor.close()
 
-            context = "Información sobre becas y ayudas económicas en la ESPOCH Sede Orellana:\n"
-            for row in data:
-                context += f"{row['tipo']} - {row['nombre']}: {row['descripcion']}\n"
+            context = "INFORMACIÓN ESPOCH SEDE ORELLANA:\n"
+            context += "Soy PochiBot, asistente virtual amigable de la ESPOCH Sede Orellana.\n\n"
             
-            context += "\nLa ESPOCH Sede Orellana es una extensión de la Escuela Superior Politécnica de Chimborazo ubicada en la provincia de Orellana, Ecuador. "
-            context += "Ofrece carreras como Ingeniería en Sistemas y Computación, Ingeniería en Biotecnología Ambiental, Administración de Empresas, Enfermería, Agronomía y Turismo. "
-            context += "La sede cuenta con biblioteca, laboratorios especializados, departamento de bienestar estudiantil, servicios médicos y áreas deportivas. "
-            context += "El período académico se divide en dos semestres: septiembre-febrero y marzo-agosto. "
-            context += "Para más información, los estudiantes pueden contactar al Departamento de Bienestar Estudiantil en el edificio administrativo."
+            # Información sobre becas y ayudas
+            context += "BECAS Y AYUDAS ECONÓMICAS DISPONIBLES:\n"
+            for row in data:
+                context += f"• {row['tipo']} - {row['nombre']}: {row['descripcion']}\n"
+            
+            # Información específica de ESPOCH Sede Orellana
+            context += "\nSOBRE LA ESPOCH SEDE ORELLANA:\n"
+            context += "• Ubicación: Provincia de Orellana, Ecuador\n"
+            context += "• Es una extensión de la Escuela Superior Politécnica de Chimborazo\n"
+            
+            context += "\nCARRERAS DISPONIBLES:\n"
+            context += "• Agronomía\n"
+            context += "• Turismo\n"
+            context += "• Ingeniería Ambiental\n"
+            context += "• Zootecnia\n"
+            context += "• Tecnologías de la Información\n"
+            
+            context += "\nSERVICIOS Y FACILIDADES:\n"
+            context += "• Biblioteca especializada\n"
+            context += "• Laboratorios de computación y ciencias\n"
+            context += "• Departamento de Bienestar Estudiantil\n"
+            context += "• Servicios médicos básicos\n"
+            context += "• Áreas deportivas y recreativas\n"
+            context += "• Comedor estudiantil\n"
+            
+            context += "\nPERÍODOS ACADÉMICOS:\n"
+            context += "• Primer semestre: Septiembre a Febrero\n"
+            context += "• Segundo semestre: Marzo a Agosto\n"
+            
+            context += "\nCONTACTO Y UBICACIÓN:\n"
+            context += "• Para más información: Departamento de Bienestar Estudiantil\n"
+            context += "• Ubicación: Edificio administrativo de la ESPOCH Sede Orellana\n"
+            context += "• Los estudiantes pueden acercarse personalmente para consultas específicas\n"
 
             return context
         except Exception as e:
@@ -365,6 +471,7 @@ class ChatbotService:
                 best_answer = ""
                 best_score = 0
 
+                # Procesar todos los fragmentos del contexto
                 for chunk in context_chunks:
                     result = cls.qa_pipeline(question=question, context=chunk, max_length=100, max_answer_length=80)
 
@@ -372,10 +479,15 @@ class ChatbotService:
                         best_answer = result['answer']
                         best_score = result['score']
 
+                # Si la puntuación es alta, usar la respuesta del QA
                 if best_score > 0.6:
                     return best_answer.strip()
+                
+                # Si la puntuación es media, dar respuesta más específica
                 elif best_score > 0.3:
                     return f"{best_answer.strip()}. Para información más detallada, te recomiendo contactar al Departamento de Bienestar Estudiantil de la ESPOCH Sede Orellana."
+                
+                # Si la puntuación es baja, respuesta específica
                 else:
                     return ("No tengo información específica sobre esa consulta en mi base de datos actual. "
                            "Te recomiendo:\n"

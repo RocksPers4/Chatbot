@@ -31,6 +31,80 @@ class ChatbotService:
     conversation_history = []
     stop_words = set(stopwords.words('spanish'))
     response_cache = {}
+    
+    # Respuestas predefinidas para preguntas frecuentes
+    common_questions = {
+        "qué es la espoch": """
+La ESPOCH (Escuela Superior Politécnica de Chimborazo) es una institución pública de educación superior fundada el 18 de abril de 1969.
+
+• Es una de las principales universidades técnicas de Ecuador
+• Su campus principal está ubicado en Riobamba, provincia de Chimborazo
+• La Sede Orellana es una extensión que ofrece educación superior de calidad en la región amazónica
+• Está acreditada por el CACES (Consejo de Aseguramiento de la Calidad de la Educación Superior)
+• Se destaca por su enfoque en carreras técnicas, ingenierías y ciencias aplicadas
+
+La ESPOCH Sede Orellana fue creada para ampliar la oferta académica en la Amazonía ecuatoriana, brindando acceso a educación superior de calidad en la región.
+        """,
+        
+        "historia de la espoch": """
+Historia de la ESPOCH:
+
+• Fundada el 18 de abril de 1969 como Instituto Superior Tecnológico de Chimborazo
+• En 1972 se transformó en Escuela Superior Politécnica de Chimborazo (ESPOCH)
+• Inició con las Facultades de Ingeniería y Zootecnia
+• A lo largo de los años ha ampliado su oferta académica y su infraestructura
+• La Sede Orellana fue creada para atender las necesidades educativas de la región amazónica
+• Actualmente es reconocida como una de las mejores universidades técnicas del país
+
+La ESPOCH ha formado a miles de profesionales que contribuyen al desarrollo del Ecuador en diversos campos científicos y tecnológicos.
+        """,
+        
+        "misión de la espoch": """
+Misión de la ESPOCH:
+
+"Formar profesionales e investigadores competentes, para contribuir al desarrollo sostenible del país."
+
+Esta misión se sustenta en:
+• Excelencia académica
+• Investigación científica y tecnológica
+• Vinculación con la sociedad
+• Gestión administrativa eficiente
+• Compromiso con el desarrollo sostenible
+• Formación integral de los estudiantes
+
+La ESPOCH Sede Orellana trabaja bajo esta misma misión, adaptándola a las necesidades específicas de la región amazónica.
+        """,
+        
+        "visión de la espoch": """
+Visión de la ESPOCH:
+
+"Ser una institución de educación superior líder en la Zona 3 del Ecuador, con reconocimiento nacional y proyección internacional."
+
+Esta visión busca:
+• Posicionar a la ESPOCH como referente de calidad educativa
+• Desarrollar investigación científica de impacto
+• Formar profesionales altamente competitivos
+• Contribuir al desarrollo sostenible del país
+• Establecer vínculos con la sociedad y el sector productivo
+• Proyectarse internacionalmente a través de convenios y colaboraciones
+
+La Sede Orellana comparte esta visión, enfocándose en ser un referente educativo en la región amazónica.
+        """,
+        
+        "espoch sede orellana": """
+ESPOCH Sede Orellana:
+
+• Es una extensión de la Escuela Superior Politécnica de Chimborazo
+• Ubicada en la provincia de Orellana, región amazónica de Ecuador
+• Creada para ampliar la oferta académica en la Amazonía ecuatoriana
+• Ofrece 5 carreras de pregrado: Agronomía, Turismo, Ingeniería Ambiental, Zootecnia y Tecnologías de la Información
+• Cuenta con infraestructura moderna: aulas, laboratorios, biblioteca y áreas recreativas
+• Tiene convenios con instituciones locales para prácticas pre-profesionales
+• Brinda servicios de bienestar estudiantil y becas
+
+La Sede Orellana representa el compromiso de la ESPOCH con la descentralización de la educación superior de calidad.
+        """
+    }
 
     @classmethod
     def initialize(cls):
@@ -166,6 +240,34 @@ class ChatbotService:
         return False
 
     @classmethod
+    def _check_common_question(cls, message):
+        """Verifica si la pregunta es una de las preguntas comunes predefinidas."""
+        message_lower = message.lower().strip()
+        
+        # Verificar preguntas exactas
+        for key, response in cls.common_questions.items():
+            if key in message_lower:
+                return response.strip()
+        
+        # Verificar patrones de preguntas sobre la ESPOCH
+        if "qué es" in message_lower and "espoch" in message_lower:
+            return cls.common_questions["qué es la espoch"].strip()
+        
+        if "historia" in message_lower and "espoch" in message_lower:
+            return cls.common_questions["historia de la espoch"].strip()
+        
+        if "misión" in message_lower and "espoch" in message_lower:
+            return cls.common_questions["misión de la espoch"].strip()
+        
+        if "visión" in message_lower and "espoch" in message_lower:
+            return cls.common_questions["visión de la espoch"].strip()
+        
+        if "sede orellana" in message_lower or ("sede" in message_lower and "orellana" in message_lower):
+            return cls.common_questions["espoch sede orellana"].strip()
+        
+        return None
+
+    @classmethod
     def get_response(cls, message):
         """Genera la respuesta al mensaje del usuario."""
         logging.info(f"Recibido mensaje: {message}")
@@ -177,6 +279,12 @@ class ChatbotService:
             cls.conversation_history.append({"role": "user", "content": message})
             if len(cls.conversation_history) > 10:
                 cls.conversation_history = cls.conversation_history[-10:]
+
+            # 0. Verificar si es una pregunta común predefinida
+            common_response = cls._check_common_question(message)
+            if common_response:
+                cls.conversation_history.append({"role": "assistant", "content": common_response})
+                return common_response
 
             # 1. Buscar intent directo en la base de datos (respuestas predefinidas)
             intent_response = cls.match_intent(message)
@@ -224,7 +332,8 @@ class ChatbotService:
                           "Responde de manera clara, amigable y útil. "
                           "Organiza tus respuestas con viñetas (•) cuando sea apropiado. "
                           "Estructura tus respuestas con una introducción, puntos principales y una conclusión. "
-                          "Sé conciso pero informativo.")
+                          "Sé conciso pero informativo. "
+                          "Cuando te pregunten sobre qué es la ESPOCH, da una respuesta completa sobre la institución.")
             
             knowledge = context
             
@@ -255,7 +364,7 @@ class ChatbotService:
                 outputs = cls.model.generate(
                     inputs['input_ids'],
                     attention_mask=inputs['attention_mask'],
-                    max_new_tokens=100,
+                    max_new_tokens=150,  # Aumentado para respuestas más completas
                     num_beams=4,
                     temperature=0.7,
                     do_sample=True,
@@ -274,7 +383,7 @@ class ChatbotService:
             # Limpiar y validar respuesta
             response = cls._clean_response(response, question)
             
-            if response and len(response) > 15 and len(response) < 300:
+            if response and len(response) > 15 and len(response) < 500:  # Aumentado el límite máximo
                 return response
             else:
                 # Fallback al modelo QA si la respuesta no es buena
@@ -305,6 +414,27 @@ class ChatbotService:
         
         # Limpiar caracteres extraños
         response = response.replace("  ", " ").strip()
+        
+        # Verificar si la respuesta es demasiado corta o genérica
+        if len(response) < 30 or response.lower() in [
+            "ayudas económicas, carreras, servicios universitarios y trámites académicos.",
+            "becas, ayudas económicas, carreras y servicios universitarios.",
+            "te puedo ayudar con información sobre la espoch."
+        ]:
+            # Si la pregunta es sobre qué es la ESPOCH, dar respuesta predefinida
+            if "qué es" in original_question.lower() and "espoch" in original_question.lower():
+                return cls.common_questions["qué es la espoch"].strip()
+            
+            # Para otras preguntas cortas, intentar mejorar
+            original_lower = original_question.lower()
+            if "historia" in original_lower and "espoch" in original_lower:
+                return cls.common_questions["historia de la espoch"].strip()
+            elif "misión" in original_lower and "espoch" in original_lower:
+                return cls.common_questions["misión de la espoch"].strip()
+            elif "visión" in original_lower and "espoch" in original_lower:
+                return cls.common_questions["visión de la espoch"].strip()
+            elif "sede orellana" in original_lower:
+                return cls.common_questions["espoch sede orellana"].strip()
         
         # Organizar la respuesta en formato estructurado
         # Detectar si hay puntos o elementos que puedan ser listados
@@ -346,10 +476,6 @@ class ChatbotService:
                     if part and len(part) > 5:
                         structured_response += f"• {part.capitalize()}\n"
                 return structured_response
-        
-        # Si la respuesta es muy corta, añadir contexto
-        if len(response) < 30:
-            response += "\n\n¿Hay algo más específico sobre la ESPOCH en lo que pueda ayudarte?"
         
         # Verificar que no sea repetición de la pregunta
         if original_question.lower() in response.lower():
@@ -416,7 +542,18 @@ class ChatbotService:
             cursor.close()
 
             context = "INFORMACIÓN ESPOCH SEDE ORELLANA:\n"
-            context += "Soy PochiBot, asistente virtual amigable de la ESPOCH Sede Orellana.\n\n"
+            
+            # Información sobre la ESPOCH (añadida para responder preguntas básicas)
+            context += "SOBRE LA ESPOCH:\n"
+            context += "La ESPOCH (Escuela Superior Politécnica de Chimborazo) es una institución pública de educación superior fundada el 18 de abril de 1969. "
+            context += "Es una de las principales universidades técnicas de Ecuador, con su campus principal en Riobamba. "
+            context += "La ESPOCH Sede Orellana es una extensión que ofrece educación superior de calidad en la región amazónica ecuatoriana. "
+            context += "La institución está acreditada por el CACES y se destaca por su enfoque en carreras técnicas, ingenierías y ciencias aplicadas.\n\n"
+            
+            # Misión y Visión
+            context += "MISIÓN Y VISIÓN:\n"
+            context += "Misión: Formar profesionales e investigadores competentes, para contribuir al desarrollo sostenible del país.\n"
+            context += "Visión: Ser una institución de educación superior líder en la Zona 3 del Ecuador, con reconocimiento nacional y proyección internacional.\n\n"
             
             # Información sobre becas y ayudas
             context += "BECAS Y AYUDAS ECONÓMICAS DISPONIBLES:\n"
@@ -427,6 +564,8 @@ class ChatbotService:
             context += "\nSOBRE LA ESPOCH SEDE ORELLANA:\n"
             context += "• Ubicación: Provincia de Orellana, Ecuador\n"
             context += "• Es una extensión de la Escuela Superior Politécnica de Chimborazo\n"
+            context += "• Creada para ampliar la oferta académica en la Amazonía ecuatoriana\n"
+            context += "• Brinda acceso a educación superior de calidad en la región\n"
             
             context += "\nCARRERAS DISPONIBLES:\n"
             context += "• Agronomía\n"
@@ -463,6 +602,11 @@ class ChatbotService:
         try:
             if cls.qa_pipeline is None:
                 cls._load_models()
+            
+            # Verificar si es una pregunta común antes de usar QA
+            common_response = cls._check_common_question(question)
+            if common_response:
+                return common_response
             
             with torch.no_grad():
                 max_length = 512

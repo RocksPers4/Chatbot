@@ -12,6 +12,7 @@ from nltk.tokenize import word_tokenize
 from nltk.corpus import stopwords
 import numpy as np
 from config import Config
+from services.knowledge_manager import knowledge_manager
 
 # Configuración de logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -31,6 +32,10 @@ class ChatbotService:
     conversation_history = []
     stop_words = set(stopwords.words('spanish'))
     response_cache = {}
+    
+    # Variable para almacenar la última respuesta para el feedback
+    last_question = None
+    last_response = None
     
     # Respuestas predefinidas para preguntas frecuentes
     common_questions = {
@@ -275,47 +280,66 @@ La Sede Orellana representa el compromiso de la ESPOCH con la descentralización
             if cls.connection is None or not cls.connection.is_connected():
                 cls.initialize()
 
+            # Guardar la pregunta para el feedback
+            cls.last_question = message
+
             # Actualizar historial de conversación
             cls.conversation_history.append({"role": "user", "content": message})
             if len(cls.conversation_history) > 10:
                 cls.conversation_history = cls.conversation_history[-10:]
 
-            # 0. Verificar si es una pregunta común predefinida
+            # 0. Buscar en la base de conocimiento aprendida
+            knowledge_answer = knowledge_manager.get_answer(message, threshold=0.75)
+            if knowledge_answer and knowledge_answer['confianza'] > 0.6:
+                response = knowledge_answer['respuesta']
+                cls.last_response = response
+                cls.conversation_history.append({"role": "assistant", "content": response})
+                logging.info(f"Respuesta encontrada en base de conocimiento (confianza: {knowledge_answer['confianza']:.2f})")
+                return response
+
+            # 1. Verificar si es una pregunta común predefinida
             common_response = cls._check_common_question(message)
             if common_response:
+                cls.last_response = common_response
                 cls.conversation_history.append({"role": "assistant", "content": common_response})
                 return common_response
 
-            # 1. Buscar intent directo en la base de datos (respuestas predefinidas)
+            # 2. Buscar intent directo en la base de datos (respuestas predefinidas)
             intent_response = cls.match_intent(message)
             if intent_response:
+                cls.last_response = intent_response
                 cls.conversation_history.append({"role": "assistant", "content": intent_response})
                 return intent_response
 
-            # 2. Verificar caché
+            # 3. Verificar caché
             if message in cls.response_cache:
                 logging.info("Respuesta encontrada en caché")
+                cls.last_response = cls.response_cache[message]
                 return cls.response_cache[message]
 
-            # 3. Verificar si la pregunta está relacionada con ESPOCH
+            # 4. Verificar si la pregunta está relacionada con ESPOCH
             if cls._is_espoch_related(message):
                 # Usar contexto específico de ESPOCH y modelo GODEL
                 context = cls.prepare_beca_ayuda_context()
                 godel_response = cls._get_godel_response(context, message)
                 
+                cls.last_response = godel_response
                 cls.conversation_history.append({"role": "assistant", "content": godel_response})
                 cls.response_cache[message] = godel_response
                 return godel_response
             else:
                 # Para preguntas no relacionadas, dar respuesta educada pero dirigida
                 general_response = cls._get_general_response(message)
+                cls.last_response = general_response
                 cls.conversation_history.append({"role": "assistant", "content": general_response})
                 cls.response_cache[message] = general_response
                 return general_response
             
         except Exception as e:
             logging.error(f"Error al generar respuesta: {str(e)}")    
-            return "Lo siento, ha ocurrido un error al procesar tu solicitud. Por favor, intenta de nuevo más tarde."
+            error_response = "Lo siento, ha ocurrido un error al procesar tu solicitud. Por favor, intenta de nuevo más tarde."
+            cls.last_response = error_response
+            return error_response
 
     @classmethod
     def _get_godel_response(cls, context, question):
@@ -646,8 +670,17 @@ La Sede Orellana representa el compromiso de la ESPOCH con la descentralización
 
     @classmethod
     def handle_feedback(cls, feedback, last_response):
-        """Maneja el feedback del usuario."""
+        """Maneja el feedback del usuario con sistema de autoaprendizaje."""
         try:
+            # Sistema de autoaprendizaje basado en feedback
+            if cls.last_question and cls.last_response:
+                knowledge_manager.learn_from_conversation(
+                    pregunta=cls.last_question,
+                    respuesta_chatbot=cls.last_response,
+                    feedback_usuario=feedback
+                )
+            
+            # Respuestas al feedback
             if feedback.lower() in ['bueno', 'útil', 'correcto', 'gracias', 'excelente']:
                 return "¡Gracias por tu feedback positivo! Me alegra haber sido de ayuda. ¿Hay algo más sobre la ESPOCH en lo que pueda asistirte?"
             elif feedback.lower() in ['malo', 'incorrecto', 'no útil', 'error']:
@@ -663,7 +696,37 @@ La Sede Orellana representa el compromiso de la ESPOCH con la descentralización
         """Limpia el historial de conversación."""
         cls.conversation_history.clear()
         cls.response_cache.clear()
+        cls.last_question = None
+        cls.last_response = None
         return "Historial de conversación borrado."
+
+    @classmethod
+    def add_manual_knowledge(cls, pregunta, respuesta, categoria="becas"):
+        """Permite añadir conocimiento manualmente al sistema."""
+        try:
+            success = knowledge_manager.add_knowledge(
+                pregunta=pregunta,
+                respuesta=respuesta,
+                categoria=categoria,
+                confianza=1.0,
+                fuente="manual"
+            )
+            if success:
+                return f"Conocimiento añadido exitosamente: {pregunta[:50]}..."
+            else:
+                return "No se pudo añadir el conocimiento. Puede que ya exista una pregunta similar."
+        except Exception as e:
+            logging.error(f"Error al añadir conocimiento manual: {e}")
+            return "Error al añadir el conocimiento."
+
+    @classmethod
+    def get_knowledge_stats(cls):
+        """Obtiene estadísticas de la base de conocimiento."""
+        try:
+            return knowledge_manager.get_knowledge_stats()
+        except Exception as e:
+            logging.error(f"Error al obtener estadísticas: {e}")
+            return {}
 
 if __name__ == "__main__":
     ChatbotService.initialize()
